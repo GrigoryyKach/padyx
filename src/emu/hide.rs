@@ -13,6 +13,11 @@
 //!
 //! The HidHide part is Windows only: on Linux the same code compiles and its tests run, but only the grab
 //! hider is used there.
+//!
+//! Checked against the HidHide sources (HidHideCLI): the flags are `--cloak-on/off/state`, `--dev-hide/unhide/list`,
+//! `--app-reg/unreg/list`; state and lists are printed as the commands that would set them; the control device is
+//! open to ordinary users (SDDL world-RWX) and the CLI runs unelevated; the driver matches the hidden list against the
+//! instance path of the HID device being opened, which is what `instance_path` builds from the hidapi path.
 #![cfg_attr(not(windows), allow(dead_code))]
 
 use serde::{Deserialize, Serialize};
@@ -317,13 +322,24 @@ pub fn instance_path(hid_path: &str) -> Option<String> {
     Some(parts.join("\\").to_uppercase())
 }
 
-/// A command's output as a list of paths: a JSON array of strings, or one per line.
+/// The output of `--dev-list` and `--app-list`. HidHideCLI prints each entry as the command that would add it
+/// (read from its sources: `--dev-hide "HID\..."`, `--app-reg "C:\...\x.exe"`). A bare quoted line or a JSON
+/// array of strings is accepted too.
 pub fn parse_path_list(out: &str) -> Vec<String> {
     let t = out.trim().trim_start_matches('\u{feff}');
     if let Ok(v) = serde_json::from_str::<Vec<String>>(t) {
         return v;
     }
-    t.lines().map(|l| l.trim().trim_matches(|c| c == '"' || c == ',').to_string()).filter(|l| !l.is_empty()).collect()
+    t.lines()
+        .map(|l| {
+            let mut l = l.trim();
+            if l.starts_with("--") {
+                l = l.split_once(char::is_whitespace).map(|(_, rest)| rest).unwrap_or("").trim();
+            }
+            l.trim_matches(|c| c == '"' || c == ',').to_string()
+        })
+        .filter(|l| !l.is_empty())
+        .collect()
 }
 
 /// `true`/`on`/`1` and `false`/`off`/`0` in the words the CLI uses.
@@ -654,6 +670,11 @@ pub mod tests {
 
     #[test]
     fn cli_output_parsers() {
+        // The real CLI answers with the command that would set that state, and lists entries the same way.
+        assert_eq!(parse_bool("--cloak-on\r\n"), Some(true));
+        assert_eq!(parse_bool("--cloak-off\r\n"), Some(false));
+        assert_eq!(parse_path_list("--dev-hide \"HID\\A&1\"\r\n--dev-hide \"HID\\B\"\r\n"), vec!["HID\\A&1".to_string(), "HID\\B".to_string()]);
+        assert_eq!(parse_path_list("--app-reg \"C:\\Tools\\Padyx.exe\"\r\n"), vec!["C:\\Tools\\Padyx.exe".to_string()]);
         assert_eq!(parse_bool("true\r\n"), Some(true));
         assert_eq!(parse_bool("Cloak: OFF"), Some(false));
         assert_eq!(parse_bool("nonsense"), None);
