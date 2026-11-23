@@ -66,6 +66,8 @@ strings! {
         demo_pad: "Demo pad", "Демо-геймпад", "Демо-геймпад";
         untested: "untested", "не проверен", "не перевірено";
         reduced_note: "The pad is in its reduced Bluetooth mode. Motion, touchpad and battery appear in a moment.", "Геймпад в урезанном режиме Bluetooth. Движение, тачпад и заряд появятся через мгновение.", "Геймпад в урізаному режимі Bluetooth. Рух, тачпад і заряд з'являться за мить.";
+        ov_front: "Front", "Спереди", "Спереду";
+        ov_top: "Top", "Сверху", "Зверху";
         ov_hint: "Press buttons and move the sticks: every control lights up", "Нажимайте кнопки и двигайте стики: каждый элемент подсвечивается", "Натискайте кнопки й рухайте стіки: кожен елемент підсвічується";
         trigger_l: "L2", "L2", "L2";
         trigger_r: "R2", "R2", "R2";
