@@ -1,0 +1,145 @@
+{
+  "schema": 1,
+  "id": "padyx",
+  "name": "Padyx",
+  "tagline": "Test and set up your DualSense",
+  "description": "Padyx shows your PlayStation DualSense live: every button, stick, trigger, the touchpad and the motion sensors. It finds stick drift with a five second test and checks the shape of each stick's travel, measures the pad's report rate and jitter, and sets the lightbar, player LEDs, rumble and adaptive trigger effects. It reads the pad over USB or Bluetooth, runs from the tray and keeps your lightbar colour on every connect. Everything stays on your PC.",
+  "features": [
+    {
+      "title": "Every control, live",
+      "text": "A drawn DualSense lights up as you press it. Triggers fill by value, sticks show their dot, the touchpad shows both fingers. Connection, battery and the measured polling rate are always on top."
+    },
+    {
+      "title": "Drift and stick shape",
+      "text": "A five second no-touch drift test gives the resting offset and jitter per stick with a verdict, and a circularity test shows the outer shape of the travel and its average error."
+    },
+    {
+      "title": "Buttons and timing",
+      "text": "A checklist of 17 controls ticks as you press them. A timing view shows the interval between reports and its jitter."
+    },
+    {
+      "title": "Lightbar and rumble",
+      "text": "Pick a colour from the NIMVORO palette or mix your own, set brightness and player LEDs, and test both rumble motors. The colour is saved and applied every time the pad connects."
+    },
+    {
+      "title": "Triggers and motion",
+      "text": "Try adaptive trigger effects (resistance, weapon, vibration) and watch the gyro and accelerometer with their calibration."
+    },
+    {
+      "title": "Light on the machine",
+      "text": "A small background part reads the pad and keeps the tray icon. The window opens only when you ask for it and closes completely."
+    }
+  ],
+  "category": "Games",
+  "accent": [
+    "#ab7cf0",
+    "#7440d8"
+  ],
+  "icon": "assets/icon.png",
+  "screenshots": [
+    "assets/screenshots/dark-en-overview.png",
+    "assets/screenshots/dark-en-sticks.png",
+    "assets/screenshots/dark-en-light.png",
+    "assets/screenshots/light-en-overview.png"
+  ],
+  "exe": "Padyx.exe",
+  "asset": "Padyx-win-x64.zip",
+  "platforms": [
+    "windows",
+    "linux"
+  ],
+  "requirements": [
+    "Windows 10/11 x64",
+    "A DualSense (USB or Bluetooth); DualShock 4 is parsed but untested"
+  ],
+  "linux": {
+    "asset": "Padyx-linux-x64.tar.gz",
+    "exe": "padyx",
+    "requirements": [
+      "Linux x86_64 (X11 or Wayland) with GTK 3 and libayatana-appindicator3 (tray icon; GNOME also needs the AppIndicator extension), a udev rule that Padyx can install for you (pkexec), xdg-desktop-portal and xdg-utils"
+    ]
+  },
+  "settingsDir": "%APPDATA%\\Padyx",
+  "i18n": {
+    "ru": {
+      "tagline": "Проверка и настройка геймпада DualSense",
+      "description": "Padyx показывает ваш PlayStation DualSense вживую: каждую кнопку, стик, триггер, тачпад и датчики движения. Пятисекундный тест находит дрейф стиков, второй тест проверяет форму хода каждого стика, а ещё программа измеряет частоту опроса и разброс, настраивает подсветку, индикаторы игрока, вибрацию и адаптивные триггеры. Геймпад читается по USB или Bluetooth, программа живёт в трее и применяет цвет подсветки при каждом подключении. Всё остаётся на вашем ПК.",
+      "category": "Игры",
+      "features": [
+        {
+          "title": "Каждый элемент вживую",
+          "text": "Нарисованный DualSense подсвечивается при нажатии. Триггеры заполняются по значению, у стиков видна точка, тачпад показывает оба пальца. Подключение, заряд и измеренная частота опроса всегда сверху."
+        },
+        {
+          "title": "Дрейф и форма стиков",
+          "text": "Пятисекундный тест без касаний даёт смещение в покое и дрожание каждого стика с вердиктом, а тест круговой формы показывает внешнюю форму хода и среднюю ошибку."
+        },
+        {
+          "title": "Кнопки и задержка",
+          "text": "Список из 17 элементов отмечается по мере нажатий. Окно времени показывает интервал между отчётами геймпада и его разброс."
+        },
+        {
+          "title": "Подсветка и вибрация",
+          "text": "Выберите цвет из палитры NIMVORO или смешайте свой, задайте яркость и индикаторы игрока, проверьте оба мотора вибрации. Цвет сохраняется и применяется при каждом подключении."
+        },
+        {
+          "title": "Триггеры и движение",
+          "text": "Попробуйте эффекты адаптивных триггеров (сопротивление, оружие, вибрация) и посмотрите на гироскоп и акселерометр с калибровкой."
+        },
+        {
+          "title": "Не нагружает компьютер",
+          "text": "Небольшая фоновая часть читает геймпад и держит значок в трее. Окно открывается только по вашей просьбе и закрывается полностью."
+        }
+      ],
+      "requirements": [
+        "Windows 10/11 x64",
+        "DualSense (USB или Bluetooth); DualShock 4 разбирается, но не проверен"
+      ],
+      "linux": {
+        "requirements": [
+          "Linux x86_64 (X11 или Wayland), GTK 3 и libayatana-appindicator3 (значок в трее; в GNOME нужно расширение AppIndicator), правило udev, которое Padyx может установить сам (pkexec), xdg-desktop-portal и xdg-utils"
+        ]
+      }
+    },
+    "uk": {
+      "tagline": "Перевірка та налаштування геймпада DualSense",
+      "description": "Padyx показує ваш PlayStation DualSense наживо: кожну кнопку, стік, тригер, тачпад і датчики руху. П'ятисекундний тест знаходить дрейф стіків, другий тест перевіряє форму ходу кожного стіка, а ще програма вимірює частоту опитування та розкид, налаштовує підсвітку, індикатори гравця, вібрацію й адаптивні тригери. Геймпад читається по USB або Bluetooth, програма живе в треї та застосовує колір підсвітки під час кожного підключення. Усе залишається на вашому ПК.",
+      "category": "Ігри",
+      "features": [
+        {
+          "title": "Кожен елемент наживо",
+          "text": "Намальований DualSense підсвічується під час натискання. Тригери заповнюються за значенням, у стіків видно точку, тачпад показує обидва пальці. Підключення, заряд і виміряна частота опитування завжди зверху."
+        },
+        {
+          "title": "Дрейф і форма стіків",
+          "text": "П'ятисекундний тест без дотиків дає зміщення в спокої та тремтіння кожного стіка з вердиктом, а тест колової форми показує зовнішню форму ходу та середню похибку."
+        },
+        {
+          "title": "Кнопки та затримка",
+          "text": "Список із 17 елементів відмічається в міру натискань. Вікно часу показує інтервал між звітами геймпада та його розкид."
+        },
+        {
+          "title": "Підсвітка та вібрація",
+          "text": "Виберіть колір із палітри NIMVORO або змішайте свій, задайте яскравість та індикатори гравця, перевірте обидва мотори вібрації. Колір зберігається й застосовується під час кожного підключення."
+        },
+        {
+          "title": "Тригери та рух",
+          "text": "Спробуйте ефекти адаптивних тригерів (опір, зброя, вібрація) і подивіться на гіроскоп та акселерометр із калібруванням."
+        },
+        {
+          "title": "Не навантажує комп'ютер",
+          "text": "Невелика фонова частина читає геймпад і тримає значок у треї. Вікно відкривається лише на ваше прохання й закривається повністю."
+        }
+      ],
+      "requirements": [
+        "Windows 10/11 x64",
+        "DualSense (USB або Bluetooth); DualShock 4 розбирається, але не перевірений"
+      ],
+      "linux": {
+        "requirements": [
+          "Linux x86_64 (X11 або Wayland), GTK 3 і libayatana-appindicator3 (значок у треї; у GNOME потрібне розширення AppIndicator), правило udev, яке Padyx може встановити сам (pkexec), xdg-desktop-portal і xdg-utils"
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,38 @@
+[package]
+name = "padyx"
+version = "1.0.0"
+edition = "2021"
+build = "build.rs"
+description = "A DualSense tester and helper: sticks, triggers, lightbar, and (later) an Xbox controller for every game"
+
+[[bin]]
+name = "Padyx"
+path = "src/main.rs"
+
+[dependencies]
+dirs = "7.0.0"
+eframe = { version = "0.37.0", default-features = false, features = ["default_fonts", "glow", "clipboard", "links"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+tray-icon = { version = "0.26.1", default-features = false }
+image = { version = "0.25", default-features = false, features = ["png"] }
+hidapi = { version = "2.6", default-features = false, features = ["windows-native", "linux-static-hidraw"] }
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.56.0"
+windows-sys = { version = "0.61.2", features = [
+    "Win32_Foundation", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging", "Win32_Security",
+    "Win32_System_LibraryLoader", "Win32_System_Console", "Win32_Storage_FileSystem", "Win32_System_Pipes", "Win32_System_IO",
+] }
+
+[target.'cfg(unix)'.dependencies]
+eframe = { version = "0.37.0", default-features = false, features = ["x11", "wayland"] }
+libc = "0.2"
+gtk = "0.18"
+tray-icon = { version = "0.26.1", default-features = false, features = ["libappindicator"] }
+
+[profile.release]
+opt-level = 3
+strip = true
+lto = true
+codegen-units = 1
