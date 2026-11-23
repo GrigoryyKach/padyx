@@ -10,6 +10,10 @@
       "text": "A drawn DualSense lights up as you press it. Triggers fill by value, sticks show their dot, the touchpad shows both fingers. Connection, battery and the measured polling rate are always on top."
     },
     {
+      "title": "An Xbox controller for every game",
+      "text": "Turn the DualSense into a virtual Xbox 360 pad (ViGEmBus and HidHide on Windows, uinput on Linux) so games outside Steam see it. The real pad is hidden while it is on and always given back. Set dead zones, response curves and rumble strength, or switch a pad to native mode for games that know the DualSense."
+    },
+    {
       "title": "Drift and stick shape",
       "text": "A five second no-touch drift test gives the resting offset and jitter per stick with a verdict, and a circularity test shows the outer shape of the travel and its average error."
     },
@@ -39,6 +43,7 @@
   "screenshots": [
     "assets/screenshots/dark-en-overview.png",
     "assets/screenshots/dark-en-sticks.png",
+    "assets/screenshots/dark-en-emulation.png",
     "assets/screenshots/dark-en-light.png",
     "assets/screenshots/light-en-overview.png"
   ],
@@ -50,13 +55,14 @@
   ],
   "requirements": [
     "Windows 10/11 x64",
-    "A DualSense (USB or Bluetooth); DualShock 4 is parsed but untested"
+    "A DualSense (USB or Bluetooth); DualShock 4 is parsed but untested",
+    "For the Xbox mode: ViGEmBus and HidHide (Padyx can download the official installers for you and checks them first)"
   ],
   "linux": {
     "asset": "Padyx-linux-x64.tar.gz",
     "exe": "padyx",
     "requirements": [
-      "Linux x86_64 (X11 or Wayland) with GTK 3 and libayatana-appindicator3 (tray icon; GNOME also needs the AppIndicator extension), a udev rule that Padyx can install for you (pkexec), xdg-desktop-portal and xdg-utils"
+      "Linux x86_64 (X11 or Wayland) with GTK 3 and libayatana-appindicator3 (tray icon; GNOME also needs the AppIndicator extension), a udev rule that Padyx can install for you (pkexec), xdg-desktop-portal and xdg-utils, and the uinput kernel module for the Xbox mode"
     ]
   },
   "settingsDir": "%APPDATA%\\Padyx",
@@ -69,6 +75,10 @@
         {
           "title": "Каждый элемент вживую",
           "text": "Нарисованный DualSense подсвечивается при нажатии. Триггеры заполняются по значению, у стиков видна точка, тачпад показывает оба пальца. Подключение, заряд и измеренная частота опроса всегда сверху."
+        },
+        {
+          "title": "Геймпад Xbox для любой игры",
+          "text": "Превратите DualSense в виртуальный геймпад Xbox 360 (ViGEmBus и HidHide в Windows, uinput в Linux), чтобы его видели игры вне Steam. Настоящий геймпад скрыт, пока режим включён, и всегда возвращается. Настройте мёртвые зоны, кривые отклика и силу вибрации или включите для геймпада родной режим для игр, которые знают DualSense."
         },
         {
           "title": "Дрейф и форма стиков",
@@ -93,11 +103,12 @@
       ],
       "requirements": [
         "Windows 10/11 x64",
-        "DualSense (USB или Bluetooth); DualShock 4 разбирается, но не проверен"
+        "DualSense (USB или Bluetooth); DualShock 4 разбирается, но не проверен",
+        "Для режима Xbox: ViGEmBus и HidHide (Padyx может скачать официальные установщики и проверяет их перед запуском)"
       ],
       "linux": {
         "requirements": [
-          "Linux x86_64 (X11 или Wayland), GTK 3 и libayatana-appindicator3 (значок в трее; в GNOME нужно расширение AppIndicator), правило udev, которое Padyx может установить сам (pkexec), xdg-desktop-portal и xdg-utils"
+          "Linux x86_64 (X11 или Wayland), GTK 3 и libayatana-appindicator3 (значок в трее; в GNOME нужно расширение AppIndicator), правило udev, которое Padyx может установить сам (pkexec), xdg-desktop-portal и xdg-utils, а для режима Xbox ещё модуль ядра uinput"
         ]
       }
     },
@@ -109,6 +120,10 @@
         {
           "title": "Кожен елемент наживо",
           "text": "Намальований DualSense підсвічується під час натискання. Тригери заповнюються за значенням, у стіків видно точку, тачпад показує обидва пальці. Підключення, заряд і виміряна частота опитування завжди зверху."
+        },
+        {
+          "title": "Геймпад Xbox для будь-якої гри",
+          "text": "Перетворіть DualSense на віртуальний геймпад Xbox 360 (ViGEmBus і HidHide у Windows, uinput у Linux), щоб його бачили ігри поза Steam. Справжній геймпад прихований, поки режим увімкнено, і завжди повертається. Налаштуйте мертві зони, криві відгуку та силу вібрації або ввімкніть для геймпада рідний режим для ігор, які знають DualSense."
         },
         {
           "title": "Дрейф і форма стіків",
@@ -133,11 +148,12 @@
       ],
       "requirements": [
         "Windows 10/11 x64",
-        "DualSense (USB або Bluetooth); DualShock 4 розбирається, але не перевірений"
+        "DualSense (USB або Bluetooth); DualShock 4 розбирається, але не перевірений",
+        "Для режиму Xbox: ViGEmBus і HidHide (Padyx може завантажити офіційні інсталятори та перевіряє їх перед запуском)"
       ],
       "linux": {
         "requirements": [
-          "Linux x86_64 (X11 або Wayland), GTK 3 і libayatana-appindicator3 (значок у треї; у GNOME потрібне розширення AppIndicator), правило udev, яке Padyx може встановити сам (pkexec), xdg-desktop-portal і xdg-utils"
+          "Linux x86_64 (X11 або Wayland), GTK 3 і libayatana-appindicator3 (значок у треї; у GNOME потрібне розширення AppIndicator), правило udev, яке Padyx може встановити сам (pkexec), xdg-desktop-portal і xdg-utils, а для режиму Xbox ще модуль ядра uinput"
         ]
       }
     }

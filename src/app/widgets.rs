@@ -36,6 +36,7 @@ pub enum Icon {
     Buttons,
     Motion,
     Light,
+    Emulation,
     Gear,
     Close,
     Check,
@@ -84,6 +85,15 @@ pub fn icon(p: &Painter, ic: Icon, c: Pos2, size: f32, col: Color32) {
                 line(c + vec2(s * dx, -s * 0.35), c + vec2(s * dx, -s * 0.8));
                 line(c + vec2(s * dx, s * 0.35), c + vec2(s * dx, s * 0.8));
             }
+        }
+        Icon::Emulation => {
+            // Two arrows, one each way: a pad standing in for another.
+            line(c + vec2(-s * 0.85, -s * 0.35), c + vec2(s * 0.85, -s * 0.35));
+            line(c + vec2(s * 0.85, -s * 0.35), c + vec2(s * 0.4, -s * 0.8));
+            line(c + vec2(s * 0.85, -s * 0.35), c + vec2(s * 0.4, s * 0.1));
+            line(c + vec2(s * 0.85, s * 0.55), c + vec2(-s * 0.85, s * 0.55));
+            line(c + vec2(-s * 0.85, s * 0.55), c + vec2(-s * 0.4, s * 0.1));
+            line(c + vec2(-s * 0.85, s * 0.55), c + vec2(-s * 0.4, s * 1.0));
         }
         Icon::Gear => {
             p.circle_stroke(c, s * 0.38, st);

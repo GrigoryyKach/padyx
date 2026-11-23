@@ -5,13 +5,17 @@
 //! The messages the window sends (one line each, see `ipc`):
 //! - `snap`: the whole [`Snapshot`] as JSON;
 //! - `out <uid|*> <json>`: change the wanted output ([`Output`]) of one pad or all of them;
-//! - `reload`: re-read `config.json` (lightbar colour for new connections, language of the tray);
+//! - `reload`: re-read `config.json` (lightbar colour for new connections, language of the tray, the emulation
+//!   settings);
+//! - `emu on`, `emu off`, `emu restore`: the Xbox emulation switch, and the emergency "give the pad back";
 //! - `quit`.
 //!
-//! Later sections extend this file: B adds the virtual pad as a hub listener and the tray's emulation toggle, C
-//! the mapping layer.
+//! The Xbox emulation is a listener of the hub (see `emu`); this file owns its switch (the tray item and the
+//! messages above), the low-battery notice and the shutdown that gives every pad back. Section C adds the
+//! mapping layer between the listener and the virtual pad.
 
 use crate::config::Config;
+use crate::emu::notify::{self, LowBattery};
 use crate::i18n::Lang;
 use crate::pad::hub::Hub;
 use crate::pad::output::Output;
@@ -25,6 +29,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 static HUB: OnceLock<Arc<Hub>> = OnceLock::new();
 static CFG: Mutex<Option<(PathBuf, Config)>> = Mutex::new(None);
 static QUIT: AtomicBool = AtomicBool::new(false);
+static LOW: Mutex<Option<LowBattery>> = Mutex::new(None);
 
 pub fn hub() -> Option<&'static Arc<Hub>> {
     HUB.get()
@@ -74,16 +79,45 @@ fn lang_now() -> Lang {
 pub fn tray_state() -> TrayState {
     let lang = lang_now();
     let snap = hub().map(|h| h.snapshot()).unwrap_or_default();
-    TrayState { lang, tooltip: tooltip(&snap, lang) }
+    TrayState { lang, tooltip: tooltip(&snap, lang), emu_on: snap.emu.enabled }
+}
+
+/// The tray item: flips the emulation and shows it at once.
+pub fn toggle_emulation() {
+    if let Some(e) = hub().and_then(|h| h.emulator()) {
+        e.set_enabled(!e.enabled());
+        tray::update(tray_state());
+    }
+}
+
+/// Tells about a pad that has run low, once per pad (see `emu::notify`).
+fn check_batteries() {
+    let snap = hub().map(|h| h.snapshot()).unwrap_or_default();
+    let low = {
+        let Ok(mut g) = LOW.lock() else { return };
+        g.get_or_insert_with(LowBattery::default).check(&notify::pads_for_check(&snap.pads))
+    };
+    if !low.is_empty() {
+        let t = strings::TABLE.get(lang_now());
+        for uid in low {
+            let pct = snap.pads.iter().find(|p| p.info.uid == uid).and_then(|p| p.state.battery).unwrap_or(0);
+            notify::send(t.low_battery_title, &t.low_battery_body.replace("{n}", &pct.to_string()));
+        }
+    }
 }
 
 /// Called every couple of seconds on the loop thread.
 pub fn on_tick() {
     tray::update(tray_state());
+    check_batteries();
 }
 
 pub fn on_shutdown() {
     if let Some(h) = hub() {
+        // Nothing stays hidden after Padyx is gone.
+        if let Some(e) = h.emulator() {
+            e.shutdown();
+        }
         h.stop();
     }
 }
@@ -93,6 +127,9 @@ fn reload() {
     let cfg = Config::load_from(&dir);
     if let Some(h) = hub() {
         h.set_template(cfg.output_template());
+        if let Some(e) = h.emulator() {
+            e.set_config(cfg.emu.clone());
+        }
     }
     if let Ok(mut g) = CFG.lock() {
         *g = Some((dir, cfg));
@@ -111,6 +148,21 @@ pub fn handle(msg: &str) -> String {
                 let uid = if uid == "*" { None } else { Some(uid) };
                 h.set_output(uid, |o| *o = out.clone());
             }
+            "ok".into()
+        }
+        "emu" => {
+            let Some(e) = hub().and_then(|h| h.emulator()) else { return "error".into() };
+            match rest {
+                "on" => e.set_enabled(true),
+                "off" => e.set_enabled(false),
+                "restore" => {
+                    if let Err(err) = e.restore_visibility() {
+                        return format!("error {err}");
+                    }
+                }
+                _ => return "error".into(),
+            }
+            tray::update(tray_state());
             "ok".into()
         }
         "reload" => {
@@ -132,6 +184,8 @@ pub fn run(dir: PathBuf, cfg: Config, demo: bool) {
         return;
     }
     let hub = Hub::new(cfg.output_template());
+    // The emulator undoes what a crashed run left hidden, then listens to every report.
+    crate::emu::attach_system(&hub, cfg.emu.clone(), &dir);
     if demo {
         hub.start_demo();
     } else {
@@ -173,7 +227,7 @@ mod tests {
 
     fn pad(conn: Conn, battery: Option<u8>, charge: Charge) -> PadSnapshot {
         PadSnapshot {
-            info: PadInfo { uid: "u".into(), kind: PadKind::DualSense, conn, serial: String::new(), demo: false },
+            info: PadInfo { uid: "u".into(), kind: PadKind::DualSense, conn, serial: String::new(), demo: false, path: String::new() },
             state: PadState { battery, charge, ..Default::default() },
             ..Default::default()
         }
@@ -187,6 +241,29 @@ mod tests {
         assert_eq!(tooltip(&one, Lang::En), "Padyx\nDualSense USB 78%");
         let two = Snapshot { pads: vec![pad(Conn::Bluetooth, Some(40), Charge::Charging), pad(Conn::Unknown, None, Charge::Discharging)], ..Default::default() };
         assert_eq!(tooltip(&two, Lang::En), "Padyx\nDualSense Bluetooth 40% +\nDualSense");
+    }
+
+    #[test]
+    fn emulation_messages_and_the_tray_switch_flip_the_emulation() {
+        use crate::emu::backend::MockBackend;
+        use crate::emu::hide::NullHider;
+        use crate::emu::map::EmuConfig;
+        let _ = HUB.set(Hub::new(Output::default()));
+        let h = hub().unwrap();
+        if h.emulator().is_none() {
+            crate::emu::Emulator::attach(h, MockBackend::new(), Box::new(NullHider::default()), EmuConfig::default(), None, false);
+        }
+        assert_eq!(handle("emu off"), "ok");
+        assert!(!tray_state().emu_on);
+        assert_eq!(handle("emu on"), "ok");
+        assert!(tray_state().emu_on, "the tray follows the switch");
+        toggle_emulation();
+        assert!(!tray_state().emu_on, "the tray menu item flips it");
+        toggle_emulation();
+        assert!(tray_state().emu_on);
+        assert_eq!(handle("emu sideways"), "error");
+        assert_eq!(handle("emu restore"), "ok", "the emergency button turns it off and restores");
+        assert!(!tray_state().emu_on);
     }
 
     #[test]
@@ -206,7 +283,7 @@ mod tests {
         let io = MockIo { reports: (0..2000).map(|_| crate::pad::demo::usb_report_from(&PadState::default())).collect(), writes: tx, fail_after_reports: false, feature_calls: Arc::new(AtomicU64::new(0)) };
         let _ = HUB.set(Hub::new(Output::default()));
         // Another test may have set the global first: the message must still be answered.
-        let info = PadInfo { uid: "dtest".into(), kind: PadKind::DualSense, conn: Conn::Unknown, serial: String::new(), demo: true };
+        let info = PadInfo { uid: "dtest".into(), kind: PadKind::DualSense, conn: Conn::Unknown, serial: String::new(), demo: true, path: String::new() };
         hub().unwrap().attach(info, Box::new(io));
         let mut want = Output::default();
         want.light = [9, 8, 7];

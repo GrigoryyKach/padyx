@@ -22,11 +22,17 @@ fn rgb_of(c: u32) -> [u8; 3] {
 }
 
 /// A labelled slider row: a fixed label column, the slider, and the value.
-fn slider_row(ui: &mut Ui, p: &Pal, label: &str, value: &mut f32, min: f32, max: f32, shown: &dyn Fn(f32) -> String) -> bool {
+pub(super) fn slider_row(ui: &mut Ui, p: &Pal, label: &str, value: &mut f32, min: f32, max: f32, shown: &dyn Fn(f32) -> String) -> bool {
+    slider_row_w(ui, p, label, 150.0, value, min, max, shown)
+}
+
+/// [`slider_row`] with a label column of `label_w` (longer labels need a wider one).
+#[allow(clippy::too_many_arguments)]
+pub(super) fn slider_row_w(ui: &mut Ui, p: &Pal, label: &str, label_w: f32, value: &mut f32, min: f32, max: f32, shown: &dyn Fn(f32) -> String) -> bool {
     let mut changed = false;
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 12.0;
-        let (lr, _) = ui.allocate_exact_size(vec2(150.0, 24.0), Sense::hover());
+        let (lr, _) = ui.allocate_exact_size(vec2(label_w, 24.0), Sense::hover());
         ui.painter().text(lr.left_center(), egui::Align2::LEFT_CENTER, label, theme::reg(13.5), p.text);
         let w = (ui.available_width() - 70.0).max(80.0);
         ui.allocate_ui_with_layout(vec2(w, 24.0), Layout::left_to_right(Align::Center), |ui| {

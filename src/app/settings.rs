@@ -19,7 +19,7 @@ impl State {
     }
 }
 
-fn switch_row(ui: &mut Ui, p: &Pal, title: &str, hint: &str, value: &mut bool) -> bool {
+pub(super) fn switch_row(ui: &mut Ui, p: &Pal, title: &str, hint: &str, value: &mut bool) -> bool {
     let mut changed = false;
     let w = ui.available_width();
     ui.horizontal(|ui| {
@@ -39,7 +39,7 @@ fn switch_row(ui: &mut Ui, p: &Pal, title: &str, hint: &str, value: &mut bool) -
     changed
 }
 
-fn combo_row<T: PartialEq + Copy>(ui: &mut Ui, p: &Pal, title: &str, id: &str, current: T, options: &[(T, String)], width: f32) -> Option<T> {
+pub(super) fn combo_row<T: PartialEq + Copy>(ui: &mut Ui, p: &Pal, title: &str, id: &str, current: T, options: &[(T, String)], width: f32) -> Option<T> {
     let mut picked = None;
     ui.horizontal(|ui| {
         ui.label(RichText::new(title).font(theme::reg(14.0)).color(p.text));
@@ -64,6 +64,8 @@ impl App {
         let t = self.s();
         let lang = self.lang;
         let mut install_rule = false;
+        let mut restore = false;
+        let restore_msg = self.emulation_view.msg.clone();
         page(ui, p, t.settings_title, None, |_| {}, |ui| {
             // ── General
             group(ui, p, t.group_general, |ui| {
@@ -108,6 +110,19 @@ impl App {
                     }
                 });
             }
+
+            // ── Xbox emulation: the way back if a game cannot see the pad
+            group(ui, p, t.nav_emulation, |ui| {
+                ui.add(egui::Label::new(RichText::new(t.emu_restore_hint).font(theme::reg(14.0)).color(p.text2)).wrap());
+                ui.add_space(12.0);
+                if widgets::btn(ui, t.emu_restore, Btn::Secondary, p).clicked() {
+                    restore = true;
+                }
+                if let Some((m, ok)) = &restore_msg {
+                    ui.add_space(8.0);
+                    ui.label(RichText::new(m).font(theme::reg(13.0)).color(if *ok { p.positive } else { p.negative }));
+                }
+            });
 
             // ── Data
             group(ui, p, t.group_data, |ui| {
@@ -171,6 +186,12 @@ impl App {
                 }
             });
         });
+        if restore {
+            self.emulation_view.msg = Some(match self.source.emu_restore(&self.dir) {
+                Ok(()) => (t.emu_restored.to_string(), true),
+                Err(e) => (format!("{}: {e}", t.emu_restore_failed), false),
+            });
+        }
         if install_rule {
             match crate::linux_setup::install(&self.dir) {
                 Ok(()) => {

@@ -1,5 +1,6 @@
 //! Settings (`config.json`) and the data folder. Both the background process and the window read this file.
 
+use crate::emu::map::EmuConfig;
 use crate::pad::output::{MuteLed, Output};
 use crate::theme::ThemeMode;
 use serde::{Deserialize, Serialize};
@@ -49,6 +50,8 @@ pub struct Config {
     pub mute_led: bool,
     /// The one-time Linux access screen was dealt with (installed or dismissed).
     pub linux_setup_seen: bool,
+    /// The Xbox emulation settings (dead zones, curves, the extra buttons, rumble, native-mode pads).
+    pub emu: EmuConfig,
     pub window: Option<Window>,
     #[serde(skip)]
     pub fresh: bool,
@@ -68,6 +71,7 @@ impl Default for Config {
             players: o.players,
             mute_led: false,
             linux_setup_seen: false,
+            emu: EmuConfig::default(),
             window: None,
             fresh: false,
         }
@@ -90,6 +94,7 @@ impl Config {
         let mut cfg: Config = text.as_deref().and_then(|s| serde_json::from_str(s.trim_start_matches('\u{feff}')).ok()).unwrap_or_default();
         cfg.fresh = text.is_none();
         cfg.players &= 0x1F;
+        cfg.emu.sanitize();
         cfg
     }
 
@@ -155,6 +160,27 @@ mod tests {
         assert_eq!(l.theme, ThemeMode::Dark);
         let t = l.output_template();
         assert_eq!((t.light, t.brightness, t.players, t.mute_led), ([1, 2, 3], 90, 0b10101, MuteLed::On));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn emulation_settings_round_trip_and_are_sanitised_on_load() {
+        let dir = tmp("emu");
+        let mut c = Config::default();
+        c.emu.left.inner = 0.2;
+        c.emu.rumble_pct = 60;
+        c.emu.set_native("aa:bb", true);
+        assert!(c.save_to(&dir));
+        let l = Config::load_from(&dir);
+        assert_eq!(l.emu, c.emu);
+        // A hand-edited file with nonsense values loads with sane ones.
+        std::fs::write(dir.join("config.json"), "{\"emu\":{\"rumble_pct\":250,\"left\":{\"inner\":5.0,\"outer\":-1.0}}}").unwrap();
+        let l = Config::load_from(&dir);
+        assert_eq!(l.emu.rumble_pct, 100);
+        assert!(l.emu.left.inner <= 0.9 && l.emu.left.outer == 0.0);
+        // No emu key at all (a file from before the emulation existed): defaults.
+        std::fs::write(dir.join("config.json"), "{\"theme\":\"dark\"}").unwrap();
+        assert_eq!(Config::load_from(&dir).emu, EmuConfig::default());
         let _ = std::fs::remove_dir_all(dir);
     }
 

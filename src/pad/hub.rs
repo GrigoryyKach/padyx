@@ -13,7 +13,7 @@ use super::output::{build_dualsense, Output};
 use super::parse::{self, Calib};
 use super::state::*;
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU16, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -47,12 +47,16 @@ struct Slot {
     intervals: Mutex<VecDeque<u32>>,
     hz: Mutex<f32>,
     out: Mutex<Output>,
+    /// Rumble a game asked for through the virtual pad: large motor in the high byte, small in the low one.
+    /// Merged with `out` when writing (the stronger wins), so the tester and a game never overwrite each other.
+    game_rumble: AtomicU16,
     dirty: AtomicBool,
     gone: AtomicBool,
 }
 
 pub struct Hub {
     slots: Mutex<Vec<Arc<Slot>>>,
+    emulator: Mutex<Option<Arc<crate::emu::Emulator>>>,
     listeners: Mutex<Vec<Arc<dyn PadListener>>>,
     template: Mutex<Output>,
     access_denied: AtomicBool,
@@ -64,6 +68,7 @@ impl Hub {
     pub fn new(template: Output) -> Arc<Hub> {
         Arc::new(Hub {
             slots: Mutex::new(Vec::new()),
+            emulator: Mutex::new(None),
             listeners: Mutex::new(Vec::new()),
             template: Mutex::new(template),
             access_denied: AtomicBool::new(false),
@@ -72,11 +77,35 @@ impl Hub {
         })
     }
 
-    /// Plug-in point for the emulation and mapping sections (not used by the tester itself).
-    #[allow(dead_code)]
+    /// Plug-in point for the emulation (and the mapping section after it).
     pub fn add_listener(&self, l: Arc<dyn PadListener>) {
         if let Ok(mut g) = self.listeners.lock() {
             g.push(l);
+        }
+    }
+
+    /// Registers the emulator as a listener and as the source of the emulation status in the snapshot.
+    pub fn set_emulator(&self, e: Arc<crate::emu::Emulator>) {
+        self.add_listener(e.clone());
+        if let Ok(mut g) = self.emulator.lock() {
+            *g = Some(e);
+        }
+    }
+
+    pub fn emulator(&self) -> Option<Arc<crate::emu::Emulator>> {
+        self.emulator.lock().ok().and_then(|g| g.clone())
+    }
+
+    /// Sets the rumble a game asked for (0..255 each) on one pad; it is merged with the tester's rumble.
+    pub fn set_game_rumble(&self, uid: &str, large: u8, small: u8) {
+        for s in self.live_slots() {
+            if s.info.lock().map(|i| i.uid != uid).unwrap_or(true) {
+                continue;
+            }
+            let v = ((large as u16) << 8) | small as u16;
+            if s.game_rumble.swap(v, Ordering::AcqRel) != v {
+                s.dirty.store(true, Ordering::Release);
+            }
         }
     }
 
@@ -128,7 +157,8 @@ impl Hub {
                 out: s.out.lock().map(|o| o.clone()).unwrap_or_default(),
             })
             .collect();
-        Snapshot { pads, access_denied: self.access_denied.load(Ordering::Relaxed), seq: self.seq.fetch_add(1, Ordering::Relaxed) }
+        let emu = self.emulator().map(|e| e.status()).unwrap_or_default();
+        Snapshot { pads, access_denied: self.access_denied.load(Ordering::Relaxed), seq: self.seq.fetch_add(1, Ordering::Relaxed), emu }
     }
 
     /// Starts a reader for a device (real or fake). The thread ends when the device fails.
@@ -139,6 +169,7 @@ impl Hub {
             intervals: Mutex::new(VecDeque::new()),
             hz: Mutex::new(0.0),
             out: Mutex::new(self.template.lock().map(|t| t.clone()).unwrap_or_default()),
+            game_rumble: AtomicU16::new(0),
             dirty: AtomicBool::new(true),
             gone: AtomicBool::new(false),
         });
@@ -169,7 +200,7 @@ impl Hub {
 
     /// Starts the scripted fake pad.
     pub fn start_demo(self: &Arc<Self>) {
-        let info = PadInfo { uid: "demo".into(), kind: PadKind::DualSense, conn: Conn::Usb, serial: "demo".into(), demo: true };
+        let info = PadInfo { uid: "demo".into(), kind: PadKind::DualSense, conn: Conn::Usb, serial: "demo".into(), demo: true, path: String::new() };
         self.attach(info, Box::new(super::demo::DemoIo::new()));
     }
 }
@@ -288,7 +319,10 @@ fn run_pad(hub: &Arc<Hub>, slot: &Arc<Slot>, mut io: Box<dyn PadIo>) {
         if conn == Conn::Unknown {
             continue;
         }
-        let out = slot.out.lock().map(|o| o.clone()).unwrap_or_default();
+        let mut out = slot.out.lock().map(|o| o.clone()).unwrap_or_default();
+        let game = slot.game_rumble.load(Ordering::Acquire);
+        out.rumble_left = out.rumble_left.max((game >> 8) as u8);
+        out.rumble_right = out.rumble_right.max(game as u8);
         let due = slot.dirty.load(Ordering::Acquire) || (out.is_active() && last_write.is_none_or(|t| t.elapsed() >= REFRESH_ACTIVE));
         if due && last_write.is_none_or(|t| t.elapsed() >= MIN_WRITE_GAP) {
             slot.dirty.store(false, Ordering::Release);
@@ -370,7 +404,7 @@ fn scan_loop(hub: &Arc<Hub>) {
                 }
                 match api.open_path(d.path()) {
                     Ok(dev) => {
-                        let info = PadInfo { uid: uid.clone(), kind, conn: Conn::Unknown, serial: d.serial_number().unwrap_or("").to_string(), demo: false };
+                        let info = PadInfo { uid: uid.clone(), kind, conn: Conn::Unknown, serial: d.serial_number().unwrap_or("").to_string(), demo: false, path: path.clone() };
                         open.push(uid);
                         hub.attach(info, Box::new(HidIo(dev)));
                     }
@@ -452,7 +486,7 @@ pub(crate) mod tests {
     }
 
     fn info(uid: &str) -> PadInfo {
-        PadInfo { uid: uid.into(), kind: PadKind::DualSense, conn: Conn::Unknown, serial: String::new(), demo: true }
+        PadInfo { uid: uid.into(), kind: PadKind::DualSense, conn: Conn::Unknown, serial: String::new(), demo: true, path: String::new() }
     }
 
     fn wait_for(mut cond: impl FnMut() -> bool) -> bool {

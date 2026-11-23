@@ -23,6 +23,7 @@ use crate::theme::{self, Pal};
 
 mod buttons;
 mod draw;
+mod emulation;
 mod light;
 mod motion;
 mod onboarding;
@@ -43,11 +44,12 @@ pub enum Nav {
     Buttons,
     Motion,
     Light,
+    Emulation,
     Settings,
 }
 
 impl Nav {
-    const ALL: [Nav; 7] = [Nav::Overview, Nav::Sticks, Nav::Triggers, Nav::Buttons, Nav::Motion, Nav::Light, Nav::Settings];
+    const ALL: [Nav; 8] = [Nav::Overview, Nav::Sticks, Nav::Triggers, Nav::Buttons, Nav::Motion, Nav::Light, Nav::Emulation, Nav::Settings];
 
     fn from_name(s: &str) -> Option<Nav> {
         Some(match s {
@@ -57,6 +59,7 @@ impl Nav {
             "buttons" => Nav::Buttons,
             "motion" => Nav::Motion,
             "light" => Nav::Light,
+            "emulation" => Nav::Emulation,
             "settings" => Nav::Settings,
             _ => return None,
         })
@@ -70,6 +73,7 @@ impl Nav {
             Nav::Buttons => "buttons",
             Nav::Motion => "motion",
             Nav::Light => "light",
+            Nav::Emulation => "emulation",
             Nav::Settings => "settings",
         }
     }
@@ -110,6 +114,7 @@ pub struct App {
     pub buttons_view: buttons::State,
     pub light_view: light::State,
     pub triggers_view: triggers::State,
+    pub emulation_view: emulation::State,
     pub settings_view: settings::State,
     pub onboarding: onboarding::State,
     pub setup_msg: Option<String>,
@@ -148,6 +153,8 @@ impl App {
         bus::init(cc.egui_ctx.clone());
         let source = if demo {
             let hub = Hub::new(cfg.output_template());
+            // The demo window owns its pad, so it owns the emulation too (the demo pad is never hidden).
+            crate::emu::attach_system(&hub, cfg.emu.clone(), &dir);
             hub.start_demo();
             Source::local(hub)
         } else {
@@ -161,7 +168,7 @@ impl App {
             updater.check(move || ctx.request_repaint());
         }
         let shots = std::env::var_os("PADYX_SHOT_DIR").map(|d| {
-            let names = std::env::var("PADYX_SHOT_NAVS").unwrap_or_else(|_| "overview,sticks,triggers,buttons,motion,light,settings".into());
+            let names = std::env::var("PADYX_SHOT_NAVS").unwrap_or_else(|_| "overview,sticks,triggers,buttons,motion,light,emulation,settings".into());
             Shots {
                 dir: PathBuf::from(d),
                 prefix: std::env::var("PADYX_SHOT_PREFIX").unwrap_or_else(|_| "shot".into()),
@@ -190,6 +197,7 @@ impl App {
             buttons_view: Default::default(),
             light_view: Default::default(),
             triggers_view: Default::default(),
+            emulation_view: Default::default(),
             settings_view: settings::State::new(),
             onboarding: onboarding::State { autostart: false },
             setup_msg: None,
@@ -296,7 +304,7 @@ impl App {
 
     fn handle_keys(&mut self, ctx: &egui::Context) {
         let ctrl = Modifiers::COMMAND;
-        for (i, key) in [Key::Num1, Key::Num2, Key::Num3, Key::Num4, Key::Num5, Key::Num6, Key::Num7].into_iter().enumerate() {
+        for (i, key) in [Key::Num1, Key::Num2, Key::Num3, Key::Num4, Key::Num5, Key::Num6, Key::Num7, Key::Num8].into_iter().enumerate() {
             if ctx.input_mut(|inp| inp.consume_key(ctrl, key)) {
                 self.go(Nav::ALL[i]);
             }
@@ -401,6 +409,7 @@ impl eframe::App for App {
         let pad = self.pad().cloned();
         match (self.nav, pad) {
             (Nav::Settings, _) => self.settings_view(&mut cui, &p),
+            (Nav::Emulation, pad) => self.emulation_view(&mut cui, &p, pad.as_ref()),
             (_, None) => self.empty_view(&mut cui, &p),
             (Nav::Overview, Some(pad)) => self.overview_view(&mut cui, &p, &pad),
             (Nav::Sticks, Some(pad)) => self.sticks_view(&mut cui, &p, &pad),
@@ -455,13 +464,23 @@ pub fn page(ui: &mut Ui, p: &Pal, title: &str, subtitle: Option<&str>, right: im
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), right);
             });
             ui.add_space(16.0);
-            egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
+            let mut area = egui::ScrollArea::vertical().auto_shrink([false, false]);
+            if let Some(y) = test_scroll() {
+                area = area.vertical_scroll_offset(y);
+            }
+            area.show(ui, |ui| {
                 ui.set_width(col_w - 12.0);
                 body(ui);
                 ui.add_space(24.0);
             });
         });
     });
+}
+
+/// Screenshots of a long page: `PADYX_SCROLL=<pixels>` (test folder only) scrolls every page to that offset.
+fn test_scroll() -> Option<f32> {
+    static V: std::sync::OnceLock<Option<f32>> = std::sync::OnceLock::new();
+    *V.get_or_init(|| if crate::config::is_test_instance() { std::env::var("PADYX_SCROLL").ok().and_then(|v| v.parse().ok()) } else { None })
 }
 
 /// A titled card: a section title (16 above, 8 below) over a card with 16 px padding.
@@ -494,6 +513,7 @@ impl App {
             (Nav::Buttons, widgets::Icon::Buttons, t.nav_buttons),
             (Nav::Motion, widgets::Icon::Motion, t.nav_motion),
             (Nav::Light, widgets::Icon::Light, t.nav_light),
+            (Nav::Emulation, widgets::Icon::Emulation, t.nav_emulation),
         ];
         for (nav, ic, label) in rows {
             if nav_row(ui, p, ic, label, self.nav == nav).clicked() {
@@ -632,7 +652,7 @@ impl App {
     }
 }
 
-fn pad_label(t: &S, pad: &PadSnapshot) -> String {
+pub fn pad_label(t: &S, pad: &PadSnapshot) -> String {
     let mut s = if pad.info.demo { t.demo_pad.to_string() } else { pad.info.kind.name().to_string() };
     if pad.info.kind == PadKind::DualShock4 {
         s.push_str(&format!(" ({})", t.untested));

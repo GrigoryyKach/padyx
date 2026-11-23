@@ -18,6 +18,9 @@ pub fn rule_text() -> String {
         s.push_str(&format!("KERNEL==\"hidraw*\", ATTRS{{idVendor}}==\"054c\", ATTRS{{idProduct}}==\"{pid}\", TAG+=\"uaccess\"\n"));
         s.push_str(&format!("KERNEL==\"hidraw*\", KERNELS==\"*054C:{}*\", TAG+=\"uaccess\"\n", pid.to_uppercase()));
     }
+    // The Xbox emulation: a virtual pad through /dev/uinput, and the pad's own input nodes (to hide them from games).
+    s.push_str("KERNEL==\"uinput\", SUBSYSTEM==\"misc\", TAG+=\"uaccess\", OPTIONS+=\"static_node=uinput\"\n");
+    s.push_str("SUBSYSTEM==\"input\", KERNEL==\"event*\", ATTRS{id/vendor}==\"054c\", TAG+=\"uaccess\"\n");
     s
 }
 
@@ -68,7 +71,8 @@ mod tests {
     #[test]
     fn rule_covers_usb_and_bluetooth_for_each_model() {
         let r = rule_text();
-        assert_eq!(r.lines().filter(|l| l.contains("TAG+=\"uaccess\"")).count(), 6);
+        assert_eq!(r.lines().filter(|l| l.contains("TAG+=\"uaccess\"")).count(), 8);
+        assert!(r.contains("KERNEL==\"uinput\"") && r.contains("ATTRS{id/vendor}==\"054c\""), "the emulation needs uinput and the pad's event nodes");
         assert!(r.contains("ATTRS{idProduct}==\"0ce6\""));
         assert!(r.contains("KERNELS==\"*054C:0CE6*\""));
         assert!(r.contains("KERNELS==\"*054C:05C4*\"") && r.contains("KERNELS==\"*054C:09CC*\""));

@@ -8,9 +8,10 @@
 //! - [`demo`]: a scripted fake pad that goes through the same pipeline, with no hardware;
 //! - [`analysis`]: drift and circularity verdicts on sample streams.
 //!
-//! Hooks for the next sections: section B registers a [`hub::PadListener`] (called on the reader thread for every
-//! parsed report, no sleeps) to feed the virtual Xbox pad, and writes game rumble through [`hub::Hub::set_output`].
-//! Section C inserts its mapping layer between the listener and the virtual pad.
+//! Plug-in points, used by the Xbox emulation (`crate::emu`): a [`hub::PadListener`] (called on the reader thread
+//! for every parsed report, no sleeps) feeds the virtual Xbox pad, and the game's rumble comes back through
+//! [`hub::Hub::set_game_rumble`], which the writer merges with whatever [`hub::Hub::set_output`] asked for.
+//! Section C inserts its mapping layer inside `emu::map`, between the listener and the virtual pad.
 
 pub mod analysis;
 pub mod demo;

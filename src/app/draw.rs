@@ -188,6 +188,7 @@ pub fn stick_plot(
     trail: &[(f32, f32)],
     rings: &[f32],
     reach: Option<&[(f32, f32)]>,
+    after: Option<(f32, f32)>,
 ) {
     let (rect, _) = ui.allocate_exact_size(vec2(size, size), egui::Sense::hover());
     let painter = ui.painter_at(rect);
@@ -214,4 +215,8 @@ pub fn stick_plot(
     }
     painter.circle_filled(at(pos.0, pos.1), 6.0, p.accent);
     painter.circle_stroke(at(pos.0, pos.1), 6.0, Stroke::new(1.0, p.bg));
+    // What the game gets after the dead zones (the Xbox emulation): an open ring.
+    if let Some(a) = after {
+        painter.circle_stroke(at(a.0, a.1), 9.0, Stroke::new(2.0, p.text));
+    }
 }

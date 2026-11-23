@@ -132,7 +132,10 @@ impl App {
         let mut start_circ = false;
         let mut finish_circ = false;
         let mut cancel_drift = false;
-        page(ui, p, t.nav_sticks, Some(t.dz_hint), |_| {}, |ui| {
+        // While the Xbox emulation is on, the plots also show what the game gets (see the Xbox emulation page).
+        let emu_on = self.snap.emu.enabled;
+        let emu_cfg = [self.cfg.emu.left, self.cfg.emu.right];
+        page(ui, p, t.nav_sticks, Some(if emu_on { t.emu_zones_hint } else { t.dz_hint }), |_| {}, |ui| {
             self.status_strip(ui, p, pad);
             let w = ui.available_width();
             let two = w > 720.0;
@@ -145,7 +148,8 @@ impl App {
             };
             let stick_cards = |ui: &mut Ui, app: &App| {
                 for (i, (title, pos, raw)) in [(t.left_stick, l, (pad.state.lx, pad.state.ly)), (t.right_stick, r, (pad.state.rx, pad.state.ry))].into_iter().enumerate() {
-                    let _ = i;
+                    let after = emu_on.then(|| emu_cfg[i].apply(pos.0, pos.1));
+                    let rings: Vec<f32> = if emu_on { vec![emu_cfg[i].inner] } else { RINGS.to_vec() };
                     let reach = circ_reach(&app.sticks_view.circ, i);
                     let trail: Vec<(f32, f32)> = app.sticks_view.trail[i].iter().copied().collect();
                     theme::card(p).inner_margin(egui::Margin::same(16)).show(ui, |ui| {
@@ -153,7 +157,7 @@ impl App {
                             ui.set_width(plot);
                             ui.label(RichText::new(title).font(theme::medium(15.0)).color(p.text));
                             ui.add_space(10.0);
-                            draw::stick_plot(ui, plot, p, pos, &trail, &RINGS, reach.as_deref());
+                            draw::stick_plot(ui, plot, p, pos, &trail, &rings, reach.as_deref(), after);
                             ui.add_space(12.0);
                             kv(ui, p, "X", &format!("{:+.3}", pos.0));
                             kv(ui, p, "Y", &format!("{:+.3}", pos.1));

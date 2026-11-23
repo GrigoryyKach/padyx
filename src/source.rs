@@ -112,12 +112,49 @@ impl Source {
         }
     }
 
+    /// Switches the Xbox emulation on or off (the owner of the hub keeps the switch).
+    pub fn emu_enable(&self, on: bool) {
+        match &self.kind {
+            Kind::Local(h) => {
+                if let Some(e) = h.emulator() {
+                    e.set_enabled(on);
+                }
+            }
+            Kind::Remote { .. } => {
+                let msg = if on { "emu on" } else { "emu off" };
+                std::thread::spawn(move || {
+                    let _ = ipc::request("daemon", msg);
+                });
+            }
+        }
+    }
+
+    /// The emergency button: emulation off and every pad visible again. Works without the background part too.
+    pub fn emu_restore(&self, data_dir: &std::path::Path) -> Result<(), String> {
+        match &self.kind {
+            Kind::Local(h) => h.emulator().map(|e| e.restore_visibility()).unwrap_or(Ok(())),
+            Kind::Remote { .. } => match ipc::request("daemon", "emu restore") {
+                Some(r) if r == "ok" => Ok(()),
+                Some(r) => Err(r.trim_start_matches("error ").to_string()),
+                // The background part is not running: undo from the record on disk.
+                None => {
+                    crate::emu::set_flag(data_dir, false);
+                    crate::emu::hide::restore_from_file(data_dir)
+                }
+            },
+        }
+    }
+
     /// Tells the background process to re-read `config.json`.
     pub fn reload(&self) {
         match &self.kind {
             Kind::Local(h) => {
                 let dir = crate::config::data_dir();
-                h.set_template(crate::config::Config::load_from(&dir).output_template());
+                let cfg = crate::config::Config::load_from(&dir);
+                h.set_template(cfg.output_template());
+                if let Some(e) = h.emulator() {
+                    e.set_config(cfg.emu.clone());
+                }
             }
             Kind::Remote { .. } => {
                 std::thread::spawn(|| {

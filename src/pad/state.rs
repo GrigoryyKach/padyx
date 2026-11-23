@@ -189,6 +189,9 @@ pub struct PadInfo {
     pub conn: Conn,
     pub serial: String,
     pub demo: bool,
+    /// The system path of the HID device (Windows: needed to hide it; empty for the demo pad).
+    #[serde(default)]
+    pub path: String,
 }
 
 /// Report-timing statistics, measured on the reader thread.
@@ -217,4 +220,7 @@ pub struct Snapshot {
     /// A pad is there but the system refused to open it (Linux without the udev rule).
     pub access_denied: bool,
     pub seq: u64,
+    /// The Xbox emulation (`present: false` when this process has no emulator).
+    #[serde(default)]
+    pub emu: crate::emu::EmuStatus,
 }

@@ -14,6 +14,7 @@ mod app;
 mod bus;
 mod config;
 mod daemon;
+mod emu;
 #[allow(dead_code)]
 mod i18n;
 mod ipc;

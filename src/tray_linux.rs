@@ -8,12 +8,12 @@
 use crate::strings;
 use crate::support;
 pub use crate::tray_common::TrayState;
-use crate::tray_common::{perform, Action};
+use crate::tray_common::{dimmed, perform, Action};
 use std::process::{Command, Stdio};
 use std::sync::mpsc::{channel, Sender};
 use std::sync::Mutex;
 use std::time::Duration;
-use tray_icon::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
+use tray_icon::menu::{CheckMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tray_icon::{Icon, TrayIconBuilder};
 
 enum Msg {
@@ -89,16 +89,19 @@ fn run(state: TrayState, icon_png: Vec<u8>, rx: std::sync::mpsc::Receiver<Msg>, 
         gtk::init().ok()?;
         let data = eframe::icon_data::from_png_bytes(&icon_png).ok()?;
         let normal = Icon::from_rgba(data.rgba.clone(), data.width, data.height).ok()?;
+        let off = Icon::from_rgba(dimmed(&data.rgba), data.width, data.height).ok()?;
         let t = strings::TABLE.get(state.lang);
         let open = MenuItem::new(t.tray_open, true, None);
+        let emu = CheckMenuItem::new(t.tray_emulation, true, state.emu_on, None);
         let support_item = MenuItem::new(support::tray_label(state.lang), true, None);
         let exit = MenuItem::new(t.tray_exit, true, None);
         let menu = Menu::new();
-        menu.append_items(&[&open, &PredefinedMenuItem::separator(), &support_item, &exit]).ok()?;
-        let tray = TrayIconBuilder::new().with_icon(normal).with_tooltip(&state.tooltip).with_menu(Box::new(menu)).build().ok()?;
-        Some((tray, open, support_item, exit))
+        menu.append_items(&[&open, &emu, &PredefinedMenuItem::separator(), &support_item, &exit]).ok()?;
+        let start = if state.emu_on { normal.clone() } else { off.clone() };
+        let tray = TrayIconBuilder::new().with_icon(start).with_tooltip(&state.tooltip).with_menu(Box::new(menu)).build().ok()?;
+        Some((tray, open, emu, support_item, exit, normal, off))
     })();
-    let Some((tray, open, support_item, exit)) = built else {
+    let Some((tray, open, emu, support_item, exit, normal, off)) = built else {
         let _ = ready.send(false);
         return;
     };
@@ -107,13 +110,15 @@ fn run(state: TrayState, icon_png: Vec<u8>, rx: std::sync::mpsc::Receiver<Msg>, 
         return;
     }
 
-    let ids = (open.id().clone(), support_item.id().clone(), exit.id().clone());
+    let ids = (open.id().clone(), emu.id().clone(), support_item.id().clone(), exit.id().clone());
     MenuEvent::set_event_handler(Some(move |e: MenuEvent| {
         let a = if e.id == ids.0 {
             Action::Open
         } else if e.id == ids.1 {
-            Action::Support
+            Action::ToggleEmulation
         } else if e.id == ids.2 {
+            Action::Support
+        } else if e.id == ids.3 {
             Action::Exit
         } else {
             return;
@@ -133,10 +138,15 @@ fn run(state: TrayState, icon_png: Vec<u8>, rx: std::sync::mpsc::Receiver<Msg>, 
                     let t = strings::TABLE.get(s.lang);
                     if last.as_ref().is_none_or(|l| l.lang != s.lang) {
                         open.set_text(t.tray_open);
+                        emu.set_text(t.tray_emulation);
                         support_item.set_text(support::tray_label(s.lang));
                         exit.set_text(t.tray_exit);
                     }
                     let _ = tray.set_tooltip(Some(&s.tooltip));
+                    emu.set_checked(s.emu_on);
+                    if last.as_ref().is_none_or(|l| l.emu_on != s.emu_on) {
+                        let _ = tray.set_icon(Some(if s.emu_on { normal.clone() } else { off.clone() }));
+                    }
                     last = Some(s);
                 }
                 Msg::Remove => {
