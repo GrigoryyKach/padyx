@@ -1,6 +1,6 @@
 [package]
 name = "padyx"
-version = "1.0.0"
+version = "1.0.1"
 edition = "2021"
 build = "build.rs"
 description = "A DualSense tester and helper: sticks, triggers, lightbar, an Xbox controller for every game, remap, macros and per-game profiles"

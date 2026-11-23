@@ -118,7 +118,7 @@ strings! {
 
         // Buttons and timing
         btn_checklist: "Press every control", "Нажмите каждый элемент", "Натисніть кожен елемент";
-        btn_progress: "{n} of 17", "{n} из 17", "{n} із 17";
+        btn_progress: "{n} of {total}", "{n} из {total}", "{n} із {total}";
         btn_all_done: "Every control works", "Все элементы работают", "Усі елементи працюють";
         btn_reset: "Reset", "Сбросить", "Скинути";
         timing_title: "Report timing", "Время между отчётами", "Час між звітами";
@@ -137,6 +137,8 @@ strings! {
         b_triangle: "Triangle", "Треугольник", "Трикутник";
         b_l1: "L1", "L1", "L1";
         b_r1: "R1", "R1", "R1";
+        b_l2: "L2 (trigger)", "L2 (триггер)", "L2 (тригер)";
+        b_r2: "R2 (trigger)", "R2 (триггер)", "R2 (тригер)";
         b_l3: "L3 (stick click)", "L3 (нажатие стика)", "L3 (натискання стіка)";
         b_r3: "R3 (stick click)", "R3 (нажатие стика)", "R3 (натискання стіка)";
         b_create: "Create", "Create", "Create";

@@ -9,7 +9,7 @@
 //! report, keep it short and never sleep in it) and [`Hub::set_output`] (one writer, dirty flag, so nothing
 //! spams the pad).
 
-use super::output::{build_dualsense, Output};
+use super::output::{build_dualsense, Light, Output};
 use super::parse::{self, Calib};
 use super::state::*;
 use std::collections::VecDeque;
@@ -37,6 +37,10 @@ pub trait PadListener: Send + Sync {
 
 const MAX_INTERVALS: usize = 120;
 /// Never write twice within this time.
+/// Pause between the lightbar setup report and the colour.
+const SETUP_GAP: Duration = Duration::from_millis(30);
+/// The colour is written once more this long after connecting.
+const SETTLE: Duration = Duration::from_millis(1500);
 const MIN_WRITE_GAP: Duration = Duration::from_millis(8);
 /// Rumble and trigger effects fade on the pad unless refreshed.
 const REFRESH_ACTIVE: Duration = Duration::from_millis(200);
@@ -253,6 +257,10 @@ fn run_pad(hub: &Arc<Hub>, slot: &Arc<Slot>, mut io: Box<dyn PadIo>) {
     let mut hz_count = 0u32;
     let mut hz_start = Instant::now();
     let mut last_led: Option<[u8; 3]> = None;
+    // The lightbar setup goes out once, alone, before the first colour; the colour is sent once more a moment
+    // later, after the pad has finished its own connect animation.
+    let mut setup_sent = false;
+    let mut reapply_at: Option<Instant> = None;
 
     while !hub.stop.load(Ordering::Relaxed) {
         match io.read(&mut buf, 40) {
@@ -323,11 +331,27 @@ fn run_pad(hub: &Arc<Hub>, slot: &Arc<Slot>, mut io: Box<dyn PadIo>) {
         let game = slot.game_rumble.load(Ordering::Acquire);
         out.rumble_left = out.rumble_left.max((game >> 8) as u8);
         out.rumble_right = out.rumble_right.max(game as u8);
+        if reapply_at.is_some_and(|t| Instant::now() >= t) {
+            reapply_at = None;
+            slot.dirty.store(true, Ordering::Release);
+        }
         let due = slot.dirty.load(Ordering::Acquire) || (out.is_active() && last_write.is_none_or(|t| t.elapsed() >= REFRESH_ACTIVE));
         if due && last_write.is_none_or(|t| t.elapsed() >= MIN_WRITE_GAP) {
             slot.dirty.store(false, Ordering::Release);
             let kernel_led = led.is_some();
-            let report = build_dualsense(conn, &out, bt_seq, !kernel_led);
+            if !kernel_led && !setup_sent {
+                setup_sent = true;
+                reapply_at = Some(Instant::now() + SETTLE);
+                let setup = build_dualsense(conn, &out, bt_seq, Light::Setup);
+                if conn == Conn::Bluetooth {
+                    bt_seq = (bt_seq + 1) & 0x0F;
+                }
+                if io.write(&setup).is_err() {
+                    break;
+                }
+                std::thread::sleep(SETUP_GAP);
+            }
+            let report = build_dualsense(conn, &out, bt_seq, if kernel_led { Light::Kernel } else { Light::Colour });
             if conn == Conn::Bluetooth {
                 bt_seq = (bt_seq + 1) & 0x0F;
             }
@@ -517,7 +541,9 @@ pub(crate) mod tests {
         assert!(p.state.pressed(Btn::Cross));
         assert_eq!(p.info.conn, Conn::Usb);
         assert!(p.timing.avg_ms > 0.5 && p.timing.max_ms >= p.timing.avg_ms);
-        // The connect write carries the saved lightbar colour.
+        // The connect writes: the lightbar setup alone, then the saved colour.
+        let setup = rx.recv_timeout(Duration::from_secs(1)).unwrap();
+        assert_eq!((setup[1 + 38], setup[1 + 41]), (0x02, 0x02));
         let first = rx.recv_timeout(Duration::from_secs(1)).unwrap();
         assert_eq!(first[0], 0x02);
         assert_eq!(&first[1 + 44..1 + 47], &[1, 2, 3]);

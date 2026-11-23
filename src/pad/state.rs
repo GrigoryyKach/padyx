@@ -85,6 +85,11 @@ impl Btn {
         Btn::Up, Btn::Down, Btn::Left, Btn::Right, Btn::Cross, Btn::Circle, Btn::Square, Btn::Triangle, Btn::L1, Btn::R1, Btn::L3, Btn::R3,
         Btn::Create, Btn::Options, Btn::Ps, Btn::Touchpad, Btn::Mute,
     ];
+    /// The tester's "press every control" list: the 17 plus the two triggers, which tick when pulled past half.
+    pub const TESTER: [Btn; 19] = [
+        Btn::Up, Btn::Down, Btn::Left, Btn::Right, Btn::Cross, Btn::Circle, Btn::Square, Btn::Triangle, Btn::L1, Btn::R1, Btn::L2, Btn::R2,
+        Btn::L3, Btn::R3, Btn::Create, Btn::Options, Btn::Ps, Btn::Touchpad, Btn::Mute,
+    ];
     pub fn bit(self) -> u32 {
         1 << (self as u32)
     }

@@ -17,6 +17,10 @@
 //! | 21..31 | left trigger effect |
 //! | 38     | valid flags 2: bit 1 lightbar setup |
 //! | 41     | lightbar setup (2 turns the default blue light off so ours shows) |
+//!
+//! The lightbar setup must travel in a report of its own, sent before the colour (the Linux driver resets the
+//! LEDs that way). With the setup bit set in every colour report the pad treats each one as "turn the light
+//! out" and the lightbar stays dark, while the player LEDs in the same report still work.
 //! | 42     | LED brightness (0 full, 1 medium, 2 low) |
 //! | 43     | player LEDs, 5 bits, bit 0 the leftmost |
 //! | 44..46 | lightbar red, green, blue |
@@ -151,9 +155,16 @@ impl Output {
         }
     }
 
-    /// The 47 bytes of common data. `lightbar` is false when another route (the kernel LED class) owns the colour.
-    pub fn common(&self, lightbar: bool) -> [u8; 47] {
+    /// The 47 bytes of common data. `light` says what to do with the lightbar.
+    pub fn common(&self, light: Light) -> [u8; 47] {
         let mut c = [0u8; 47];
+        if light == Light::Setup {
+            // Only the setup: release the default light, touch nothing else.
+            c[38] = 0x02;
+            c[41] = 0x02;
+            return c;
+        }
+        let lightbar = light == Light::Colour;
         c[0] = 0x01 | 0x02 | 0x04 | 0x08;
         c[1] = 0x01 | 0x10 | if lightbar { 0x04 } else { 0 };
         c[2] = self.rumble_right;
@@ -165,10 +176,6 @@ impl Output {
         };
         c[10..21].copy_from_slice(&self.trigger_right.bytes());
         c[21..32].copy_from_slice(&self.trigger_left.bytes());
-        if lightbar {
-            c[38] = 0x02;
-            c[41] = 0x02;
-        }
         c[42] = 0;
         c[43] = self.players & 0x1F;
         let rgb = self.light_scaled();
@@ -179,9 +186,20 @@ impl Output {
     }
 }
 
+/// What a report does with the lightbar.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Light {
+    /// Leave it alone (another route, the kernel LED class, owns the colour).
+    Kernel,
+    /// Only release the default blue light; nothing else in the report.
+    Setup,
+    /// Set the colour (and the rest of the output).
+    Colour,
+}
+
 /// The full output report for a DualSense. `seq` is the Bluetooth sequence number (0..15).
-pub fn build_dualsense(conn: Conn, out: &Output, seq: u8, lightbar: bool) -> Vec<u8> {
-    let common = out.common(lightbar);
+pub fn build_dualsense(conn: Conn, out: &Output, seq: u8, light: Light) -> Vec<u8> {
+    let common = out.common(light);
     match conn {
         Conn::Bluetooth => {
             let mut r = vec![0u8; 78];
@@ -229,7 +247,7 @@ mod tests {
         o.brightness = 255;
         o.rumble_left = 200;
         o.rumble_right = 100;
-        let r = build_dualsense(Conn::Bluetooth, &o, 5, true);
+        let r = build_dualsense(Conn::Bluetooth, &o, 5, Light::Colour);
         assert_eq!(r.len(), 78);
         assert_eq!((r[0], r[1], r[2]), (0x31, 0x50, 0x10));
         // common data starts at byte 3
@@ -244,7 +262,7 @@ mod tests {
         let want = crc32(&[], &[&[0xA2u8][..], &r[..74]].concat());
         assert_eq!(u32::from_le_bytes(r[74..78].try_into().unwrap()), want);
         // The sequence number is the high nibble and wraps at 16.
-        assert_eq!(build_dualsense(Conn::Bluetooth, &o, 17, true)[1], 0x10);
+        assert_eq!(build_dualsense(Conn::Bluetooth, &o, 17, Light::Colour)[1], 0x10);
     }
 
     #[test]
@@ -252,15 +270,40 @@ mod tests {
         let mut o = Output::default();
         o.players = Output::player_pattern(3);
         o.mute_led = MuteLed::Pulse;
-        let r = build_dualsense(Conn::Usb, &o, 0, true);
+        let r = build_dualsense(Conn::Usb, &o, 0, Light::Colour);
         assert_eq!(r.len(), 63);
         assert_eq!(r[0], 0x02);
         assert_eq!(r[1 + 8], 2);
         assert_eq!(r[1 + 43], 0b10101);
-        // flags: lightbar control and setup are on when we own the lightbar
-        assert!(r[2] & 0x04 != 0 && r[1 + 38] == 0x02 && r[1 + 41] == 0x02);
-        let k = build_dualsense(Conn::Usb, &o, 0, false);
+        // flags: lightbar control is on, the setup is not (it has its own report)
+        assert!(r[2] & 0x04 != 0 && r[1 + 38] == 0 && r[1 + 41] == 0);
+        let k = build_dualsense(Conn::Usb, &o, 0, Light::Kernel);
         assert!(k[2] & 0x04 == 0 && k[1 + 38] == 0 && k[1 + 41] == 0);
+    }
+
+    /// Pins the lightbar bytes (offsets into the USB report, which has the id first).
+    #[test]
+    fn lightbar_setup_and_colour_are_separate_reports() {
+        let mut o = Output::default();
+        o.light = [200, 100, 50];
+        o.brightness = 255;
+        let setup = build_dualsense(Conn::Usb, &o, 0, Light::Setup);
+        assert_eq!(setup.len(), 63);
+        assert_eq!((setup[0], setup[1], setup[2]), (0x02, 0, 0), "no flags but the setup");
+        assert_eq!((setup[1 + 38], setup[1 + 41]), (0x02, 0x02));
+        assert!(setup[1 + 44..1 + 47] == [0, 0, 0] && setup[1 + 43] == 0);
+        let c = build_dualsense(Conn::Usb, &o, 0, Light::Colour);
+        assert_eq!(c[2] & 0x14, 0x14, "lightbar control and player LEDs");
+        assert_eq!((c[1 + 38], c[1 + 41]), (0, 0), "the colour report carries no setup");
+        assert_eq!(&c[1 + 44..1 + 47], &[200, 100, 50]);
+        // Bluetooth: the same bytes after the 3-byte header, with a valid CRC.
+        let b = build_dualsense(Conn::Bluetooth, &o, 3, Light::Setup);
+        assert!(bt_crc_ok(&b));
+        assert_eq!((b[3 + 38], b[3 + 41]), (0x02, 0x02));
+        let b = build_dualsense(Conn::Bluetooth, &o, 4, Light::Colour);
+        assert!(bt_crc_ok(&b));
+        assert_eq!((b[3 + 1] & 0x04, b[3 + 38]), (0x04, 0));
+        assert_eq!(&b[3 + 44..3 + 47], &[200, 100, 50]);
     }
 
     #[test]
