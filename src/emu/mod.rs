@@ -26,9 +26,13 @@ mod backend_linux;
 #[cfg(windows)]
 mod backend_win;
 pub mod drivers;
+pub mod foreground;
 pub mod hide;
+pub mod macros;
 pub mod map;
 pub mod notify;
+pub mod profile;
+pub mod remap;
 pub mod xbox;
 pub mod zones;
 
@@ -36,7 +40,9 @@ use crate::pad::hub::{Hub, PadListener};
 use crate::pad::{PadInfo, PadState};
 use backend::{Backend, BackendStatus, RumbleFn, VirtualPad};
 use hide::{HideStatus, HideTarget, Hider};
-use map::{map_pad, pad_key, EmuConfig};
+use macros::Engine;
+use map::{pad_key, EmuConfig};
+use profile::Profile;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -80,11 +86,17 @@ pub struct EmuStatus {
     pub pads: Vec<PadEmu>,
     /// A run with the mock back end: nothing real is created or hidden (screenshots, tests).
     pub simulated: bool,
+    /// The active profile (empty: the default one).
+    #[serde(default)]
+    pub profile: String,
+    /// The file name of the program in the foreground, when the emulator watches it (auto-switch on).
+    #[serde(default)]
+    pub fg_exe: Option<String>,
 }
 
 enum Slot {
     Starting,
-    Active { pad: Box<dyn VirtualPad>, last: XboxState, sent: bool },
+    Active { pad: Box<dyn VirtualPad>, last: XboxState, sent: bool, engine: Engine },
     Native,
     Failed { error: String, retry_at: Instant },
 }
@@ -109,6 +121,24 @@ pub struct Emulator {
     me: Weak<Emulator>,
     cache: Mutex<(Instant, BackendStatus)>,
     hide_status: Mutex<HideStatus>,
+    /// The clock macros and turbo run on.
+    epoch: Instant,
+    profiles: Mutex<ProfileRt>,
+}
+
+/// The profiles as the emulator knows them, and which one is active.
+struct ProfileRt {
+    default: EmuConfig,
+    default_light: Option<[u8; 3]>,
+    list: Vec<Profile>,
+    current: String,
+    auto: bool,
+    /// The program in the foreground, as the watcher last saw it (a full path).
+    fg: Option<String>,
+    /// The active profile's name; empty is the default profile.
+    active: String,
+    /// The lightbar colour last applied for a profile (a profile with a colour sets it once, on switching).
+    light_applied: Option<(String, [u8; 3])>,
 }
 
 const FAIL_RETRY: Duration = Duration::from_secs(3);
@@ -164,7 +194,12 @@ impl Emulator {
             me: me.clone(),
             cache: Mutex::new((Instant::now() - STATUS_TTL * 2, BackendStatus::Ready)),
             hide_status: Mutex::new(HideStatus::Ready),
+            epoch: Instant::now(),
+            profiles: Mutex::new(ProfileRt { default: EmuConfig::default(), default_light: None, list: Vec::new(), current: String::new(), auto: false, fg: None, active: String::new(), light_applied: None }),
         });
+        if let Ok(mut rt) = emu.profiles.lock() {
+            rt.default = emu.config().as_ref().clone();
+        }
         hub.set_emulator(emu.clone());
         emu
     }
@@ -177,9 +212,82 @@ impl Emulator {
         self.cfg.read().map(|g| g.clone()).unwrap_or_default()
     }
 
-    /// Applies new settings. A pad that went native loses its virtual pad at once; the others pick the new
-    /// dead zones up on their next report.
-    pub fn set_config(&self, mut cfg: EmuConfig) {
+    /// Applies one set of settings with no profiles (the default profile only).
+    #[allow(dead_code)] // the tests and the live checks use it; the programs go through `apply_config`
+    pub fn set_config(&self, cfg: EmuConfig) {
+        self.set_profiles(cfg, None, Vec::new(), String::new(), false);
+    }
+
+    /// Applies the saved settings: the default profile (`cfg.emu`, `cfg.light`) and the others.
+    pub fn apply_config(&self, cfg: &crate::config::Config) {
+        self.set_profiles(cfg.emu.clone(), Some(cfg.light), cfg.profiles.clone(), cfg.profile_current.clone(), cfg.profile_auto);
+    }
+
+    /// Applies the default profile and the list, picks the active one and runs with its settings.
+    pub fn set_profiles(&self, mut default: EmuConfig, default_light: Option<[u8; 3]>, mut list: Vec<Profile>, mut current: String, auto: bool) {
+        default.sanitize();
+        profile::sanitize(&mut list, &mut current);
+        let step = {
+            let Ok(mut rt) = self.profiles.lock() else { return };
+            rt.default = default;
+            rt.default_light = default_light;
+            rt.list = list;
+            rt.current = current;
+            rt.auto = auto;
+            Self::choose(&mut rt)
+        };
+        self.run_choice(step);
+    }
+
+    /// The program in the foreground changed (`None`: unknown). With auto-switch on this may change the profile.
+    pub fn on_foreground(&self, exe: Option<String>) {
+        let step = {
+            let Ok(mut rt) = self.profiles.lock() else { return };
+            if rt.fg == exe {
+                return;
+            }
+            rt.fg = exe;
+            if !rt.auto {
+                return;
+            }
+            Self::choose(&mut rt)
+        };
+        self.run_choice(step);
+    }
+
+    /// Does the watcher need to look at the foreground?
+    pub fn auto_switch(&self) -> bool {
+        self.profiles.lock().map(|rt| rt.auto).unwrap_or(false)
+    }
+
+    /// Picks the active profile; returns the settings to run with and the lightbar colour to set, if any.
+    fn choose(rt: &mut ProfileRt) -> (EmuConfig, Option<[u8; 3]>) {
+        let idx = profile::pick(&rt.list, &rt.current, rt.auto, rt.fg.as_deref());
+        rt.active = idx.map(|i| rt.list[i].name.clone()).unwrap_or_default();
+        let eff = profile::effective(&rt.default, idx.map(|i| &rt.list[i]));
+        let light = idx.and_then(|i| rt.list[i].light).or(rt.default_light);
+        let apply = match light {
+            Some(c) if rt.light_applied.as_ref() != Some(&(rt.active.clone(), c)) => {
+                rt.light_applied = Some((rt.active.clone(), c));
+                Some(c)
+            }
+            _ => None,
+        };
+        (eff, apply)
+    }
+
+    fn run_choice(&self, (cfg, light): (EmuConfig, Option<[u8; 3]>)) {
+        self.apply(cfg);
+        if let Some(c) = light {
+            if let Some(hub) = self.hub.lock().ok().and_then(|h| h.upgrade()) {
+                hub.set_output(None, |o| o.light = c);
+            }
+        }
+    }
+
+    /// Runs with these settings. A pad that went native loses its virtual pad at once; the others pick the new
+    /// settings up on their next report.
+    fn apply(&self, mut cfg: EmuConfig) {
         cfg.sanitize();
         let old = self.config();
         if *old == cfg {
@@ -336,7 +444,7 @@ impl Emulator {
             slot.hidden.store(true, Ordering::Release);
         }
         if let Ok(mut st) = slot.state.lock() {
-            *st = Slot::Active { pad, last: XboxState::default(), sent: false };
+            *st = Slot::Active { pad, last: XboxState::default(), sent: false, engine: Engine::new() };
         }
     }
 
@@ -367,7 +475,12 @@ impl Emulator {
                     .collect()
             })
             .unwrap_or_default();
-        EmuStatus { present: true, enabled: self.enabled(), backend, hide: self.hide_status.lock().map(|g| *g).unwrap_or_default(), pads, simulated: self.simulated }
+        let (profile, fg_exe) = self
+            .profiles
+            .lock()
+            .map(|rt| (rt.active.clone(), if rt.auto { rt.fg.as_deref().map(|p| p.rsplit(['\\', '/']).next().unwrap_or(p).to_string()) } else { None }))
+            .unwrap_or_default();
+        EmuStatus { present: true, enabled: self.enabled(), backend, hide: self.hide_status.lock().map(|g| *g).unwrap_or_default(), pads, simulated: self.simulated, profile, fg_exe }
     }
 }
 
@@ -384,8 +497,8 @@ impl PadListener for Emulator {
         }
         let mut st = slot.state.lock().expect("slot");
         match &mut *st {
-            Slot::Active { pad, last, sent } => {
-                let x = map_pad(state, &cfg);
+            Slot::Active { pad, last, sent, engine } => {
+                let x = engine.process(self.epoch.elapsed().as_micros() as u64, state, &cfg);
                 if *sent && x == *last {
                     return;
                 }
@@ -427,12 +540,17 @@ impl PadListener for Emulator {
 }
 
 /// The emulator for this system, or the mock when `PADYX_EMU_MOCK=1` is set in a test instance (screenshots).
-pub fn attach_system(hub: &Arc<Hub>, cfg: EmuConfig, data_dir: &Path) -> Arc<Emulator> {
-    if drivers::mock_requested() {
+/// It also starts the watcher of the foreground program (idle unless auto-switch is on).
+pub fn attach_system(hub: &Arc<Hub>, cfg: &crate::config::Config, data_dir: &Path) -> Arc<Emulator> {
+    let emu = if drivers::mock_requested() {
         let be = backend::MockBackend::new();
-        return Emulator::attach(hub, be, Box::new(hide::SimHider::default()), cfg, Some(data_dir), true);
-    }
-    Emulator::attach(hub, backend::system_backend(), hide::system_hider(data_dir), cfg, Some(data_dir), false)
+        Emulator::attach(hub, be, Box::new(hide::SimHider::default()), cfg.emu.clone(), Some(data_dir), true)
+    } else {
+        Emulator::attach(hub, backend::system_backend(), hide::system_hider(data_dir), cfg.emu.clone(), Some(data_dir), false)
+    };
+    emu.apply_config(cfg);
+    foreground::spawn_watcher(Arc::downgrade(&emu), foreground::system_probe(), foreground::WATCH_EVERY);
+    emu
 }
 
 #[cfg(test)]

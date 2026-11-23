@@ -153,7 +153,7 @@ impl Source {
                 let cfg = crate::config::Config::load_from(&dir);
                 h.set_template(cfg.output_template());
                 if let Some(e) = h.emulator() {
-                    e.set_config(cfg.emu.clone());
+                    e.apply_config(&cfg);
                 }
             }
             Kind::Remote { .. } => {

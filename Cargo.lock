@@ -2245,6 +2245,7 @@ dependencies = [
  "vigem-client",
  "windows-sys 0.61.2",
  "winreg",
+ "x11rb",
 ]
 
 [[package]]

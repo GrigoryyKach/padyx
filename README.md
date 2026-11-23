@@ -2,8 +2,6 @@
 
 A DualSense tester and helper for Windows and Linux. It shows every control of a PlayStation DualSense live, finds stick drift, sets the lightbar, player LEDs, rumble and adaptive triggers, and makes the pad look like an Xbox 360 controller so games outside Steam see it.
 
-> Status: the tester, the pad setup and the Xbox controller mode (ViGEmBus and HidHide on Windows, uinput on Linux, dead zones, curves, rumble) are done. Remapping, macros, turbo and per-game profiles are added in the same 1.0.0 and are described here when they land.
-
 ![Overview](assets/screenshots/dark-en-overview.png)
 
 ## What it does
@@ -15,6 +13,7 @@ A DualSense tester and helper for Windows and Linux. It shows every control of a
 - **Touchpad and motion.** The touchpad surface with two fingers, the gyroscope and accelerometer (with the calibration read from the pad) and a small orientation glyph.
 - **Lightbar and rumble.** The NIMVORO palette or a custom RGB colour, brightness, player LEDs, the mute button light and both rumble motors. The colour is saved and applied every time the pad connects.
 - **Xbox emulation.** A virtual Xbox 360 pad for every DualSense, with the real pad hidden from games while it is on. Dead zones (inner, outer and anti), response curves, trigger dead zones, the touchpad click and Mute as extra buttons, and the strength of the rumble games send back. A per-pad native mode for games that know the DualSense. See below.
+- **Remap, macros, turbo and profiles.** Any DualSense control to any Xbox button, macros on a button or a chord, turbo from 5 to 30 Hz, and named profiles that can switch by the game in front. See below.
 - **Settings.** Language (English, Russian, Ukrainian), theme, start with the computer (off by default), updates and about.
 
 Padyx has two parts in one program: a small background part that reads the pad and keeps the tray icon (it draws nothing), and the window, which starts when you open Padyx and closes completely when you close it.
@@ -39,6 +38,25 @@ Many games outside Steam only know Xbox controllers. With the emulation on, Pady
 - **Tray.** The tooltip shows the battery, there is a low battery notice at 15 %, the menu has an Xbox emulation switch, and the icon is dimmed while the emulation is off.
 - **Light on the machine.** With the window closed, the background part reads the pad and maps it with no queue and no polling sleeps; the CPU and memory numbers are in the notes below.
 
+## Remap, macros, turbo and profiles
+
+These work on the virtual Xbox pad, so they apply while the Xbox emulation is on. Everything they produce goes to the virtual pad and nowhere else: Padyx sends no keyboard or mouse input.
+
+![Remap](assets/screenshots/dark-en-remap.png)
+
+- **Remap.** Every DualSense control can go to any Xbox button, to a trigger, or to nothing. Besides the 17 controls of the tester, the click of the touchpad counts separately for its **left and right halves**, the triggers count as buttons past a threshold you set, and each of the eight stick directions is a button too. Sticks can be swapped, inverted, used as the D-pad (eight directions) or switched off. The dead zones stay with the physical stick, so they are applied before any of this. A control lights up on the page while you press it.
+- **Macros.** A trigger (one control, or a chord such as Create + L1) starts a list of steps: press, hold for some milliseconds, release, wait. Modes: once, while the trigger is held, or a toggled loop. A step editor builds the list. The trigger controls can be held back from the game while the chord is down.
+- **Turbo.** Any Xbox button, 5 to 30 presses a second while you hold it. It follows the remap: it pulses what the game would receive.
+- **Profiles.** Named sets of the remap, dead zones, macros, turbo and, if you like, a lightbar colour. The default profile is always there. Pick one by hand, or turn on **switching by game**: Padyx reads the name of the program in front (twice a second, read only) and uses the first profile whose list of programs contains it, falling back to the one you picked. Profiles can be duplicated, exported to a JSON file and imported again (also by dropping the file on the window). The rumble strength and the native-mode pads are the same in every profile.
+
+![Macros and turbo](assets/screenshots/dark-en-macros.png)
+
+![Profiles](assets/screenshots/dark-en-profiles.png)
+
+**Fair play.** Macros and turbo can break the rules of online games and get an account banned. Padyx says so on the page. Use them where it is allowed, such as single-player games and your own accessibility needs.
+
+The macro clock is the pad's report stream (250 reports a second or more), so timings are accurate to a few milliseconds and a step shorter than that is rounded up to the next report.
+
 ### Drivers (Windows)
 
 The emulation needs two free drivers by Nefarius Software Solutions. Padyx ships neither:
@@ -60,6 +78,7 @@ The built-in checksums are the `InstallerSha256` values of the winget manifests 
 - The virtual pad comes from **uinput** and looks like the kernel's own Xbox 360 pad (vendor `045e`, product `028e`, the `xpad` buttons and axes, force feedback of the rumble type), so SDL, Steam Input and Proton map it with no setup. It needs `/dev/uinput`: load the module with `sudo modprobe uinput` if it is missing. The udev rule that Padyx installs for the tester (one `pkexec` prompt) also gives your user access to `/dev/uinput` and to the pad's input devices.
 - To hide the real pad, Padyx grabs its evdev nodes (`EVIOCGRAB`) while the emulation is on and lets go when it stops; the kernel also releases a grab if Padyx dies. A program that reads the DualSense through hidraw (Steam does) can still see it: use the native mode for such games.
 - Wayland and X11 both work; the emulation does not use the display.
+- **Switching profiles by game works on X11 only** (it reads `_NET_ACTIVE_WINDOW` and the window's process through `/proc`). A Wayland compositor does not tell other programs which window is in front, so on Wayland the page says the feature is unavailable and the profile you picked by hand stays. A Windows game under Wine shows up as the Wine process, often `wine64-preloader`; put that name in the profile's list.
 
 ## Pads
 
@@ -82,6 +101,7 @@ Over Bluetooth a DualSense starts in a reduced mode with few fields. Padyx reads
 Measured with the demo pad (250 reports a second, the sticks always moving, so every report changes the virtual pad), window closed, on the release build:
 
 - Added latency of the emulation, from a parsed report to the virtual pad having it (find the pad, map, hand over): about 0.1 microseconds in the mapping and 6 to 8 microseconds in the ViGEmBus call (median), 45 microseconds at the 99th percentile; the reader thread does all of it, with no queue and no sleep in between. A change reaches XInput in about 11 microseconds (median) by a measurement from the call to XInput showing it.
+- Remap, two macros and two turbo buttons all active add about 0.1 microseconds (median, 0.2 at the 99th percentile) to the mapping of one report; the whole path with the mock back end is 0.2 microseconds (median).
 - CPU and memory of the background part over five minutes (12 logical cores): with the emulation on, 1.1 % of one core on average (0.09 % of the machine, 2.5 % at most) and a 14.4 MB working set (3.4 MB private); with it off, 0.4 % of one core and 14.0 MB. The virtual pad is only updated when a report changes it.
 
 ## Build
@@ -93,7 +113,7 @@ cargo test
 
 On Windows the GNU and MSVC toolchains both work. `cargo test -- --ignored --test-threads=1` also runs the live checks against an installed ViGEmBus (a synthetic pad, never your own; they need the driver and are skipped without it). `Padyx --demo` runs the window with a scripted fake pad and no hardware (set `PADYX_DATA_DIR` to a temporary folder first). `Padyx --list` prints the Sony pads the system sees and exits; it only enumerates and never writes to a pad.
 
-Environment variables for tests and screenshots: `PADYX_DATA_DIR`, `PADYX_DEMO=1`, `PADYX_DEMO_T` (start of the script, seconds), `PADYX_DEMO_HOLD=1` (freeze the script), `PADYX_LANG`, `PADYX_THEME`, `PADYX_EMU_MOCK=1` (a test folder only: a simulated emulation, no driver is used and nothing is hidden) and `PADYX_SCROLL` (scroll the pages, for screenshots). `tools/screenshots.ps1` drives the window through the pages and saves a PNG of each.
+Environment variables for tests and screenshots: `PADYX_DATA_DIR`, `PADYX_DEMO=1`, `PADYX_DEMO_T` (start of the script, seconds), `PADYX_DEMO_HOLD=1` (freeze the script), `PADYX_LANG`, `PADYX_THEME`, `PADYX_EMU_MOCK=1` (a test folder only: a simulated emulation, no driver is used and nothing is hidden), `PADYX_FG_MOCK=<path>` (a test folder only: pretend this program is in front, for the profile screenshots), `PADYX_EDIT_PROFILE=<name>` (a test folder only: the profile the pages edit) and `PADYX_SCROLL` (scroll the pages, for screenshots). `tools/screenshots.ps1` drives the window through the pages and saves a PNG of each.
 
 ## Report layouts
 

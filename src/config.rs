@@ -1,6 +1,7 @@
 //! Settings (`config.json`) and the data folder. Both the background process and the window read this file.
 
 use crate::emu::map::EmuConfig;
+use crate::emu::profile::{self, Profile};
 use crate::pad::output::{MuteLed, Output};
 use crate::theme::ThemeMode;
 use serde::{Deserialize, Serialize};
@@ -52,6 +53,12 @@ pub struct Config {
     pub linux_setup_seen: bool,
     /// The Xbox emulation settings (dead zones, curves, the extra buttons, rumble, native-mode pads).
     pub emu: EmuConfig,
+    /// The profiles besides the default one (the default one is `emu` and `light`).
+    pub profiles: Vec<Profile>,
+    /// The profile in use when nothing else decides; empty is the default one.
+    pub profile_current: String,
+    /// Switch profiles by the program in the foreground.
+    pub profile_auto: bool,
     pub window: Option<Window>,
     #[serde(skip)]
     pub fresh: bool,
@@ -72,6 +79,9 @@ impl Default for Config {
             mute_led: false,
             linux_setup_seen: false,
             emu: EmuConfig::default(),
+            profiles: Vec::new(),
+            profile_current: String::new(),
+            profile_auto: false,
             window: None,
             fresh: false,
         }
@@ -95,6 +105,7 @@ impl Config {
         cfg.fresh = text.is_none();
         cfg.players &= 0x1F;
         cfg.emu.sanitize();
+        profile::sanitize(&mut cfg.profiles, &mut cfg.profile_current);
         cfg
     }
 

@@ -25,9 +25,12 @@ mod buttons;
 mod draw;
 mod emulation;
 mod light;
+mod macros;
 mod motion;
 mod onboarding;
 mod overview;
+mod profiles;
+mod remap;
 mod settings;
 mod sticks;
 mod triggers;
@@ -45,11 +48,14 @@ pub enum Nav {
     Motion,
     Light,
     Emulation,
+    Remap,
+    Macros,
+    Profiles,
     Settings,
 }
 
 impl Nav {
-    const ALL: [Nav; 8] = [Nav::Overview, Nav::Sticks, Nav::Triggers, Nav::Buttons, Nav::Motion, Nav::Light, Nav::Emulation, Nav::Settings];
+    const ALL: [Nav; 11] = [Nav::Overview, Nav::Sticks, Nav::Triggers, Nav::Buttons, Nav::Motion, Nav::Light, Nav::Emulation, Nav::Remap, Nav::Macros, Nav::Profiles, Nav::Settings];
 
     fn from_name(s: &str) -> Option<Nav> {
         Some(match s {
@@ -60,6 +66,9 @@ impl Nav {
             "motion" => Nav::Motion,
             "light" => Nav::Light,
             "emulation" => Nav::Emulation,
+            "remap" => Nav::Remap,
+            "macros" => Nav::Macros,
+            "profiles" => Nav::Profiles,
             "settings" => Nav::Settings,
             _ => return None,
         })
@@ -74,6 +83,9 @@ impl Nav {
             Nav::Motion => "motion",
             Nav::Light => "light",
             Nav::Emulation => "emulation",
+            Nav::Remap => "remap",
+            Nav::Macros => "macros",
+            Nav::Profiles => "profiles",
             Nav::Settings => "settings",
         }
     }
@@ -115,6 +127,9 @@ pub struct App {
     pub light_view: light::State,
     pub triggers_view: triggers::State,
     pub emulation_view: emulation::State,
+    pub profiles_view: profiles::State,
+    /// The profile the Emulation, Remap and Macros pages edit (`None`: the default one).
+    pub edit_profile: Option<String>,
     pub settings_view: settings::State,
     pub onboarding: onboarding::State,
     pub setup_msg: Option<String>,
@@ -154,7 +169,7 @@ impl App {
         let source = if demo {
             let hub = Hub::new(cfg.output_template());
             // The demo window owns its pad, so it owns the emulation too (the demo pad is never hidden).
-            crate::emu::attach_system(&hub, cfg.emu.clone(), &dir);
+            crate::emu::attach_system(&hub, &cfg, &dir);
             hub.start_demo();
             Source::local(hub)
         } else {
@@ -179,6 +194,7 @@ impl App {
                 done: Arc::new(AtomicBool::new(false)),
             }
         });
+        let edit_profile = if crate::config::is_test_instance() { std::env::var("PADYX_EDIT_PROFILE").ok().filter(|n| !n.is_empty()) } else { None };
         let first = shots.as_ref().and_then(|s| s.queue.first().copied()).unwrap_or(Nav::Overview);
         let out = cfg.output_template();
         let mut app = Self {
@@ -198,6 +214,8 @@ impl App {
             light_view: Default::default(),
             triggers_view: Default::default(),
             emulation_view: Default::default(),
+            profiles_view: Default::default(),
+            edit_profile,
             settings_view: settings::State::new(),
             onboarding: onboarding::State { autostart: false },
             setup_msg: None,
@@ -304,7 +322,7 @@ impl App {
 
     fn handle_keys(&mut self, ctx: &egui::Context) {
         let ctrl = Modifiers::COMMAND;
-        for (i, key) in [Key::Num1, Key::Num2, Key::Num3, Key::Num4, Key::Num5, Key::Num6, Key::Num7, Key::Num8].into_iter().enumerate() {
+        for (i, key) in [Key::Num1, Key::Num2, Key::Num3, Key::Num4, Key::Num5, Key::Num6, Key::Num7, Key::Num8, Key::Num9].into_iter().enumerate() {
             if ctx.input_mut(|inp| inp.consume_key(ctrl, key)) {
                 self.go(Nav::ALL[i]);
             }
@@ -410,6 +428,9 @@ impl eframe::App for App {
         match (self.nav, pad) {
             (Nav::Settings, _) => self.settings_view(&mut cui, &p),
             (Nav::Emulation, pad) => self.emulation_view(&mut cui, &p, pad.as_ref()),
+            (Nav::Remap, pad) => self.remap_view(&mut cui, &p, pad.as_ref()),
+            (Nav::Macros, pad) => self.macros_view(&mut cui, &p, pad.as_ref()),
+            (Nav::Profiles, _) => self.profiles_view(&mut cui, &p),
             (_, None) => self.empty_view(&mut cui, &p),
             (Nav::Overview, Some(pad)) => self.overview_view(&mut cui, &p, &pad),
             (Nav::Sticks, Some(pad)) => self.sticks_view(&mut cui, &p, &pad),
@@ -514,6 +535,9 @@ impl App {
             (Nav::Motion, widgets::Icon::Motion, t.nav_motion),
             (Nav::Light, widgets::Icon::Light, t.nav_light),
             (Nav::Emulation, widgets::Icon::Emulation, t.nav_emulation),
+            (Nav::Remap, widgets::Icon::Remap, t.nav_remap),
+            (Nav::Macros, widgets::Icon::Macro, t.nav_macros),
+            (Nav::Profiles, widgets::Icon::Profile, t.nav_profiles),
         ];
         for (nav, ic, label) in rows {
             if nav_row(ui, p, ic, label, self.nav == nav).clicked() {

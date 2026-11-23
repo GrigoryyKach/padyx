@@ -3,7 +3,7 @@
   "id": "padyx",
   "name": "Padyx",
   "tagline": "Test and set up your DualSense",
-  "description": "Padyx shows your PlayStation DualSense live: every button, stick, trigger, the touchpad and the motion sensors. It finds stick drift with a five second test and checks the shape of each stick's travel, measures the pad's report rate and jitter, and sets the lightbar, player LEDs, rumble and adaptive trigger effects. It reads the pad over USB or Bluetooth, runs from the tray and keeps your lightbar colour on every connect. Everything stays on your PC.",
+  "description": "Padyx shows your PlayStation DualSense live: every button, stick, trigger, the touchpad and the motion sensors. It finds stick drift with a five second test and checks the shape of each stick's travel, measures the pad's report rate and jitter, and sets the lightbar, player LEDs, rumble and adaptive trigger effects. It can make the pad an Xbox controller for every game, with remapping, macros, turbo and per-game profiles. It reads the pad over USB or Bluetooth, runs from the tray and keeps your lightbar colour on every connect. Everything stays on your PC.",
   "features": [
     {
       "title": "Every control, live",
@@ -12,6 +12,10 @@
     {
       "title": "An Xbox controller for every game",
       "text": "Turn the DualSense into a virtual Xbox 360 pad (ViGEmBus and HidHide on Windows, uinput on Linux) so games outside Steam see it. The real pad is hidden while it is on and always given back. Set dead zones, response curves and rumble strength, or switch a pad to native mode for games that know the DualSense."
+    },
+    {
+      "title": "Remap, macros, turbo and profiles",
+      "text": "Send any DualSense control to any Xbox button, swap or invert the sticks, use a stick as the D-pad, and turn a trigger into a button. Record macros on a button or a chord, set turbo from 5 to 30 Hz, and keep it all in named profiles that switch by the game in front. Macros and turbo act on the virtual pad only."
     },
     {
       "title": "Drift and stick shape",
@@ -44,6 +48,9 @@
     "assets/screenshots/dark-en-overview.png",
     "assets/screenshots/dark-en-sticks.png",
     "assets/screenshots/dark-en-emulation.png",
+    "assets/screenshots/dark-en-remap.png",
+    "assets/screenshots/dark-en-macros.png",
+    "assets/screenshots/dark-en-profiles.png",
     "assets/screenshots/dark-en-light.png",
     "assets/screenshots/light-en-overview.png"
   ],
@@ -69,7 +76,7 @@
   "i18n": {
     "ru": {
       "tagline": "Проверка и настройка геймпада DualSense",
-      "description": "Padyx показывает ваш PlayStation DualSense вживую: каждую кнопку, стик, триггер, тачпад и датчики движения. Пятисекундный тест находит дрейф стиков, второй тест проверяет форму хода каждого стика, а ещё программа измеряет частоту опроса и разброс, настраивает подсветку, индикаторы игрока, вибрацию и адаптивные триггеры. Геймпад читается по USB или Bluetooth, программа живёт в трее и применяет цвет подсветки при каждом подключении. Всё остаётся на вашем ПК.",
+      "description": "Padyx показывает ваш PlayStation DualSense вживую: каждую кнопку, стик, триггер, тачпад и датчики движения. Пятисекундный тест находит дрейф стиков, второй тест проверяет форму хода каждого стика, а ещё программа измеряет частоту опроса и разброс, настраивает подсветку, индикаторы игрока, вибрацию и адаптивные триггеры. Он может сделать геймпад контроллером Xbox для любой игры, с переназначением, макросами, турбо и профилями под игры. Геймпад читается по USB или Bluetooth, программа живёт в трее и применяет цвет подсветки при каждом подключении. Всё остаётся на вашем ПК.",
       "category": "Игры",
       "features": [
         {
@@ -79,6 +86,10 @@
         {
           "title": "Геймпад Xbox для любой игры",
           "text": "Превратите DualSense в виртуальный геймпад Xbox 360 (ViGEmBus и HidHide в Windows, uinput в Linux), чтобы его видели игры вне Steam. Настоящий геймпад скрыт, пока режим включён, и всегда возвращается. Настройте мёртвые зоны, кривые отклика и силу вибрации или включите для геймпада родной режим для игр, которые знают DualSense."
+        },
+        {
+          "title": "Переназначение, макросы, турбо и профили",
+          "text": "Отправляйте любой элемент DualSense на любую кнопку Xbox, меняйте местами и инвертируйте стики, используйте стик как крестовину и превращайте триггер в кнопку. Задавайте макросы на кнопку или сочетание, турбо от 5 до 30 Гц и храните всё в именных профилях, которые переключаются по игре на экране. Макросы и турбо действуют только на виртуальный геймпад."
         },
         {
           "title": "Дрейф и форма стиков",
@@ -114,7 +125,7 @@
     },
     "uk": {
       "tagline": "Перевірка та налаштування геймпада DualSense",
-      "description": "Padyx показує ваш PlayStation DualSense наживо: кожну кнопку, стік, тригер, тачпад і датчики руху. П'ятисекундний тест знаходить дрейф стіків, другий тест перевіряє форму ходу кожного стіка, а ще програма вимірює частоту опитування та розкид, налаштовує підсвітку, індикатори гравця, вібрацію й адаптивні тригери. Геймпад читається по USB або Bluetooth, програма живе в треї та застосовує колір підсвітки під час кожного підключення. Усе залишається на вашому ПК.",
+      "description": "Padyx показує ваш PlayStation DualSense наживо: кожну кнопку, стік, тригер, тачпад і датчики руху. П'ятисекундний тест знаходить дрейф стіків, другий тест перевіряє форму ходу кожного стіка, а ще програма вимірює частоту опитування та розкид, налаштовує підсвітку, індикатори гравця, вібрацію й адаптивні тригери. Він може зробити геймпад контролером Xbox для будь-якої гри, з перепризначенням, макросами, турбо та профілями під ігри. Геймпад читається по USB або Bluetooth, програма живе в треї та застосовує колір підсвітки під час кожного підключення. Усе залишається на вашому ПК.",
       "category": "Ігри",
       "features": [
         {
@@ -124,6 +135,10 @@
         {
           "title": "Геймпад Xbox для будь-якої гри",
           "text": "Перетворіть DualSense на віртуальний геймпад Xbox 360 (ViGEmBus і HidHide у Windows, uinput у Linux), щоб його бачили ігри поза Steam. Справжній геймпад прихований, поки режим увімкнено, і завжди повертається. Налаштуйте мертві зони, криві відгуку та силу вібрації або ввімкніть для геймпада рідний режим для ігор, які знають DualSense."
+        },
+        {
+          "title": "Перепризначення, макроси, турбо та профілі",
+          "text": "Надсилайте будь-який елемент DualSense на будь-яку кнопку Xbox, міняйте місцями й інвертуйте стіки, використовуйте стік як хрестовину та перетворюйте тригер на кнопку. Задавайте макроси на кнопку або поєднання, турбо від 5 до 30 Гц і зберігайте все в іменних профілях, що перемикаються за грою на екрані. Макроси та турбо діють лише на віртуальний геймпад."
         },
         {
           "title": "Дрейф і форма стіків",

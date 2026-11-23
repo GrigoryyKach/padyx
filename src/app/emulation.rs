@@ -43,7 +43,7 @@ impl State {
     }
 }
 
-fn xbtn_name(t: &S, b: XBtn) -> String {
+pub(super) fn xbtn_name(t: &S, b: XBtn) -> String {
     match b {
         XBtn::Up => t.xb_up,
         XBtn::Down => t.xb_down,
@@ -146,7 +146,8 @@ impl App {
         let ctx = ui.ctx().clone();
         let t = self.s();
         let snap_emu = self.snap.emu.clone();
-        let mut cfg: EmuConfig = self.cfg.emu.clone();
+        let mut cfg: EmuConfig = self.edit_cfg();
+        let editing = self.edit_name();
         let ds = self.emulation_view.drivers_status();
         let mock = snap_emu.simulated;
         let mut switch_to: Option<bool> = None;
@@ -169,6 +170,7 @@ impl App {
         let setup_msg = self.setup_msg.clone();
 
         page(ui, p, t.nav_emulation, Some(t.emu_intro), |_| {}, |ui| {
+            super::remap::editing_chip(ui, p, t, &editing);
             // ── The switch
             ui.add_space(16.0);
             theme::card(p).inner_margin(egui::Margin::same(16)).show(ui, |ui| {
@@ -455,10 +457,6 @@ impl App {
                 Err(e) => self.setup_msg = Some(format!("{}: {e}", t.setup_failed)),
             }
         }
-        cfg.sanitize();
-        if cfg != self.cfg.emu {
-            self.cfg.emu = cfg;
-            self.touch_cfg(&ctx);
-        }
+        self.store_edit_cfg(cfg, &ctx);
     }
 }

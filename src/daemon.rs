@@ -128,7 +128,7 @@ fn reload() {
     if let Some(h) = hub() {
         h.set_template(cfg.output_template());
         if let Some(e) = h.emulator() {
-            e.set_config(cfg.emu.clone());
+            e.apply_config(&cfg);
         }
     }
     if let Ok(mut g) = CFG.lock() {
@@ -185,7 +185,7 @@ pub fn run(dir: PathBuf, cfg: Config, demo: bool) {
     }
     let hub = Hub::new(cfg.output_template());
     // The emulator undoes what a crashed run left hidden, then listens to every report.
-    crate::emu::attach_system(&hub, cfg.emu.clone(), &dir);
+    crate::emu::attach_system(&hub, &cfg, &dir);
     if demo {
         hub.start_demo();
     } else {

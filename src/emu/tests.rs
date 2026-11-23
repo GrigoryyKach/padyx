@@ -401,3 +401,191 @@ fn added_latency_is_microseconds() {
     // Far under a millisecond even in a debug build on a busy machine.
     assert!(p(0.5) < 200.0, "median {} us", p(0.5));
 }
+
+// ── Section C: macros, turbo and profiles through the emulator ──
+
+fn profile_with(name: &str, exe: &str) -> profile::Profile {
+    profile::Profile { name: name.into(), exes: vec![exe.into()], ..Default::default() }
+}
+
+#[test]
+fn macros_and_turbo_only_ever_reach_the_virtual_pad() {
+    use super::macros::{Macro, Step, Turbo, XOut};
+    use super::remap::DIn;
+    let mut cfg = EmuConfig::default();
+    cfg.macros.push(Macro { name: "Y tap".into(), chord: vec![DIn::Create, DIn::L1], steps: vec![Step::Hold(XOut::Btn(XBtn::Y), 40)], ..Default::default() });
+    cfg.turbo.push(Turbo { btn: XBtn::A, hz: 30 });
+    let (_hub, emu, be) = rig(RecHider::default(), cfg);
+    emu.set_enabled(true);
+    let i = info("01", true);
+    let mut s = PadState::default();
+    assert!(wait_for(|| {
+        feed(&emu, &i, &s);
+        active(&emu, "01")
+    }));
+    // Turbo: Cross held for 150 ms pulses A.
+    s.set(Btn::Cross, true);
+    let t0 = Instant::now();
+    while t0.elapsed() < Duration::from_millis(150) {
+        feed(&emu, &i, &s);
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    // The chord: Create + L1 starts the macro, which holds Y for 40 ms and swallows Back and LB.
+    s.set(Btn::Cross, false);
+    s.set(Btn::Create, true);
+    s.set(Btn::L1, true);
+    let t0 = Instant::now();
+    while t0.elapsed() < Duration::from_millis(120) {
+        feed(&emu, &i, &s);
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    let log = be.log.lock().unwrap().clone();
+    let a_on = log.iter().filter(|x| x.pressed(XBtn::A)).count();
+    let a_off_after = log.iter().skip_while(|x| !x.pressed(XBtn::A)).any(|x| !x.pressed(XBtn::A));
+    assert!(a_on >= 1 && a_off_after, "turbo pulses A: {log:?}");
+    assert!(log.iter().any(|x| x.pressed(XBtn::Y)), "the macro pressed Y");
+    assert!(log.iter().skip_while(|x| !x.pressed(XBtn::Y)).any(|x| !x.pressed(XBtn::Y)), "and released it again");
+    assert!(!log.iter().any(|x| x.pressed(XBtn::Back) || x.pressed(XBtn::Lb)), "the chord is swallowed");
+}
+
+#[test]
+fn the_foreground_program_picks_the_profile_and_auto_off_ignores_it() {
+    let (hub, emu, _be) = rig(RecHider::default(), EmuConfig::default());
+    let mut shooter = profile_with("Shooter", "cod.exe");
+    shooter.emu.left.inner = 0.3;
+    shooter.emu.rumble_pct = 5; // not per profile: ignored
+    shooter.light = Some([255, 0, 0]);
+    let racing = profile_with("Racing", "forza.exe");
+    let mut def = EmuConfig::default();
+    def.rumble_pct = 70;
+    emu.set_profiles(def.clone(), Some([1, 2, 3]), vec![shooter.clone(), racing], String::new(), true);
+    assert_eq!(emu.status().profile, "");
+    emu.on_foreground(Some("C:\\Games\\COD.exe".into()));
+    let st = emu.status();
+    assert_eq!(st.profile, "Shooter");
+    assert_eq!(st.fg_exe.as_deref(), Some("COD.exe"));
+    assert_eq!(emu.config().left.inner, 0.3);
+    assert_eq!(emu.config().rumble_pct, 70, "rumble belongs to the machine");
+    emu.on_foreground(Some("C:\\Windows\\explorer.exe".into()));
+    assert_eq!(emu.status().profile, "");
+    assert_eq!(emu.config().left.inner, def.left.inner);
+    // Auto-switch off: the foreground does not matter, the chosen one does.
+    emu.set_profiles(def.clone(), Some([1, 2, 3]), vec![shooter.clone()], "Shooter".into(), false);
+    emu.on_foreground(Some("C:\\Games\\other.exe".into()));
+    assert_eq!(emu.status().profile, "Shooter");
+    assert!(emu.status().fg_exe.is_none(), "not watching");
+    assert!(!hub.snapshot().emu.profile.is_empty());
+    // A chosen profile that was deleted falls back to the default.
+    emu.set_profiles(def, Some([1, 2, 3]), vec![], "Shooter".into(), false);
+    assert_eq!(emu.status().profile, "");
+}
+
+#[test]
+fn a_profile_can_set_the_lightbar_and_leaving_it_restores_the_usual_colour() {
+    use crate::pad::demo::usb_report_from;
+    let (tx, _rx) = std::sync::mpsc::channel();
+    let io = MockIo { reports: (0..3000).map(|_| usb_report_from(&PadState::default())).collect(), writes: tx, fail_after_reports: false, feature_calls: Arc::new(AtomicU64::new(0)) };
+    let hub = Hub::new(crate::pad::output::Output::default());
+    let emu = Emulator::attach(&hub, MockBackend::new(), Box::new(RecHider::default()), EmuConfig::default(), None, false);
+    hub.attach(info("01", true), Box::new(io));
+    assert!(wait_for(|| !hub.snapshot().pads.is_empty()));
+    let light = |h: &Arc<Hub>| h.snapshot().pads[0].out.light;
+    let mut p = profile_with("Shooter", "cod.exe");
+    p.light = Some([200, 10, 20]);
+    emu.set_profiles(EmuConfig::default(), Some([9, 9, 9]), vec![p.clone()], String::new(), true);
+    assert_eq!(light(&hub), [9, 9, 9], "the usual colour while the default profile is active");
+    emu.on_foreground(Some("cod.exe".into()));
+    assert_eq!(light(&hub), [200, 10, 20]);
+    // Saving other settings does not repaint the colour a user picked meanwhile.
+    hub.set_output(None, |o| o.light = [5, 5, 5]);
+    emu.set_profiles(EmuConfig::default(), Some([9, 9, 9]), vec![p], String::new(), true);
+    assert_eq!(light(&hub), [5, 5, 5]);
+    emu.on_foreground(Some("explorer.exe".into()));
+    assert_eq!(light(&hub), [9, 9, 9]);
+    hub.stop();
+}
+
+#[test]
+fn the_watcher_follows_a_probe_only_while_auto_switch_is_on() {
+    use super::foreground::{spawn_watcher, Probe};
+    struct Script(Arc<Mutex<Option<String>>>);
+    impl Probe for Script {
+        fn exe(&mut self) -> Option<String> {
+            self.0.lock().unwrap().clone()
+        }
+    }
+    let (_hub, emu, _be) = rig(RecHider::default(), EmuConfig::default());
+    let now = Arc::new(Mutex::new(Some("cod.exe".to_string())));
+    spawn_watcher(Arc::downgrade(&emu), Box::new(Script(now.clone())), Duration::from_millis(10));
+    let list = vec![profile_with("Shooter", "cod.exe")];
+    // Off: the watcher does nothing.
+    emu.set_profiles(EmuConfig::default(), None, list.clone(), String::new(), false);
+    std::thread::sleep(Duration::from_millis(80));
+    assert_eq!(emu.status().profile, "");
+    // On: it finds the game, and follows when the game is left.
+    emu.set_profiles(EmuConfig::default(), None, list, String::new(), true);
+    assert!(wait_for(|| emu.status().profile == "Shooter"));
+    *now.lock().unwrap() = Some("notepad.exe".into());
+    assert!(wait_for(|| emu.status().profile.is_empty()));
+}
+
+#[test]
+fn settings_with_profiles_round_trip_through_the_config_file() {
+    let dir = tmp("profiles-cfg");
+    let mut c = crate::config::Config::default();
+    let mut p = profile_with("Racing", "forza.exe");
+    p.emu.left.inner = 0.2;
+    c.profiles.push(p);
+    c.profile_current = "Racing".into();
+    c.profile_auto = true;
+    assert!(c.save_to(&dir));
+    let l = crate::config::Config::load_from(&dir);
+    assert_eq!(l.profiles, c.profiles);
+    assert_eq!((l.profile_current.as_str(), l.profile_auto), ("Racing", true));
+    // A file from before profiles existed has none, and the default profile is its own `emu`.
+    std::fs::write(dir.join("config.json"), "{\"emu\":{\"rumble_pct\":30}}").unwrap();
+    let l = crate::config::Config::load_from(&dir);
+    assert!(l.profiles.is_empty() && !l.profile_auto && l.profile_current.is_empty());
+    // A current name that does not exist is dropped on load.
+    std::fs::write(dir.join("config.json"), "{\"profile_current\":\"Gone\"}").unwrap();
+    assert!(crate::config::Config::load_from(&dir).profile_current.is_empty());
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// The cost of the whole mapping (remap, macros, turbo, dead zones) per report, with a busy configuration.
+/// `cargo test --release engine_cost -- --nocapture` to see the numbers.
+#[test]
+fn engine_cost_with_remap_macros_and_turbo_is_nanoseconds() {
+    use super::macros::{Engine, Macro, MacroMode, Step, Turbo, XOut};
+    use super::remap::{DIn, Out};
+    let mut cfg = EmuConfig::default();
+    cfg.set_target(DIn::Cross, Out::Btn(XBtn::B));
+    cfg.set_target(DIn::Circle, Out::Btn(XBtn::A));
+    cfg.set_target(DIn::L2, Out::Btn(XBtn::X));
+    cfg.set_target(DIn::TouchLeft, Out::Btn(XBtn::Lb));
+    cfg.turbo = vec![Turbo { btn: XBtn::A, hz: 20 }, Turbo { btn: XBtn::X, hz: 12 }];
+    cfg.macros = vec![
+        Macro { chord: vec![DIn::Create, DIn::L1], steps: vec![Step::Hold(XOut::Btn(XBtn::B), 80), Step::Wait(40)], ..Default::default() },
+        Macro { chord: vec![DIn::R3], mode: MacroMode::Toggle, steps: vec![Step::Press(XOut::Btn(XBtn::X)), Step::Wait(30), Step::Release(XOut::Btn(XBtn::X)), Step::Wait(100)], ..Default::default() },
+    ];
+    cfg.sanitize();
+    let cfg = Arc::new(cfg);
+    let mut e = Engine::new();
+    let mut s = PadState::default();
+    s.set(Btn::Cross, true);
+    s.set(Btn::R3, true);
+    let n = 200_000usize;
+    let mut times: Vec<u32> = Vec::with_capacity(n);
+    let mut sink = 0u32;
+    for k in 0..n {
+        s.lx = (k % 200) as u8 + 20;
+        s.l2 = (k % 250) as u8;
+        let t0 = Instant::now();
+        let x = e.process(k as u64 * 4000, &s, &cfg);
+        times.push(t0.elapsed().as_nanos().min(u32::MAX as u128) as u32);
+        sink = sink.wrapping_add(x.buttons as u32);
+    }
+    times.sort_unstable();
+    println!("mapping per report with remap, 2 macros and 2 turbo: median {} ns, p99 {} ns, max {} ns (sink {sink})", times[n / 2], times[n * 99 / 100], times[n - 1]);
+    assert!(times[n / 2] < 50_000, "median {} ns", times[n / 2]);
+}

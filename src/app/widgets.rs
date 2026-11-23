@@ -37,9 +37,14 @@ pub enum Icon {
     Motion,
     Light,
     Emulation,
+    Remap,
+    Macro,
+    Profile,
     Gear,
     Close,
     Check,
+    Up,
+    Down,
 }
 
 /// Points of an arc around `c`, angles in radians measured clockwise from 12 o'clock.
@@ -94,6 +99,34 @@ pub fn icon(p: &Painter, ic: Icon, c: Pos2, size: f32, col: Color32) {
             line(c + vec2(s * 0.85, s * 0.55), c + vec2(-s * 0.85, s * 0.55));
             line(c + vec2(-s * 0.85, s * 0.55), c + vec2(-s * 0.4, s * 0.1));
             line(c + vec2(-s * 0.85, s * 0.55), c + vec2(-s * 0.4, s * 1.0));
+        }
+        Icon::Remap => {
+            // Two keys with an arrow from one to the other.
+            p.rect_stroke(Rect::from_center_size(c + vec2(-s * 0.6, 0.0), vec2(s * 0.6, s * 0.6)), 2.0, st, StrokeKind::Inside);
+            p.rect_stroke(Rect::from_center_size(c + vec2(s * 0.6, 0.0), vec2(s * 0.6, s * 0.6)), 2.0, st, StrokeKind::Inside);
+            line(c + vec2(-s * 0.2, 0.0), c + vec2(s * 0.2, 0.0));
+            line(c + vec2(s * 0.2, 0.0), c + vec2(0.0, -s * 0.22));
+            line(c + vec2(s * 0.2, 0.0), c + vec2(0.0, s * 0.22));
+        }
+        Icon::Macro => {
+            // A list of steps with the first one playing.
+            line(c + vec2(-s * 0.15, -s * 0.6), c + vec2(s * 0.85, -s * 0.6));
+            line(c + vec2(-s * 0.15, 0.0), c + vec2(s * 0.85, 0.0));
+            line(c + vec2(-s * 0.15, s * 0.6), c + vec2(s * 0.85, s * 0.6));
+            p.add(Shape::closed_line(vec![c + vec2(-s * 0.85, -s * 0.85), c + vec2(-s * 0.85, -s * 0.35), c + vec2(-s * 0.45, -s * 0.6)], PathStroke::new(1.5, col)));
+        }
+        Icon::Profile => {
+            // Two cards, one in front of the other.
+            p.rect_stroke(Rect::from_center_size(c + vec2(s * 0.2, -s * 0.2), vec2(s * 1.3, s * 1.0)), 2.0, st, StrokeKind::Inside);
+            p.rect_stroke(Rect::from_center_size(c + vec2(-s * 0.2, s * 0.2), vec2(s * 1.3, s * 1.0)), 2.0, st, StrokeKind::Inside);
+        }
+        Icon::Up => {
+            line(c + vec2(-s * 0.5, s * 0.2), c + vec2(0.0, -s * 0.3));
+            line(c + vec2(0.0, -s * 0.3), c + vec2(s * 0.5, s * 0.2));
+        }
+        Icon::Down => {
+            line(c + vec2(-s * 0.5, -s * 0.2), c + vec2(0.0, s * 0.3));
+            line(c + vec2(0.0, s * 0.3), c + vec2(s * 0.5, -s * 0.2));
         }
         Icon::Gear => {
             p.circle_stroke(c, s * 0.38, st);

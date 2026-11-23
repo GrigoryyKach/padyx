@@ -134,7 +134,8 @@ impl App {
         let mut cancel_drift = false;
         // While the Xbox emulation is on, the plots also show what the game gets (see the Xbox emulation page).
         let emu_on = self.snap.emu.enabled;
-        let emu_cfg = [self.cfg.emu.left, self.cfg.emu.right];
+        let active = self.active_cfg();
+        let emu_cfg = [active.left, active.right];
         page(ui, p, t.nav_sticks, Some(if emu_on { t.emu_zones_hint } else { t.dz_hint }), |_| {}, |ui| {
             self.status_strip(ui, p, pad);
             let w = ui.available_width();

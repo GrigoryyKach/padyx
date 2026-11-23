@@ -1,0 +1,82 @@
+{
+  "onboarded": true,
+  "profile_auto": true,
+  "emu": {
+    "left": { "inner": 0.12, "outer": 0.03, "anti": 0.0, "curve": "Smooth" },
+    "right": { "inner": 0.08, "outer": 0.0, "anti": 0.0, "curve": "Custom", "p1": [0.3, 0.18], "p2": [0.7, 0.82] },
+    "lt": { "inner": 0.04, "outer": 0.05 },
+    "rumble_pct": 80,
+    "remap": {
+      "binds": [
+        ["Cross", { "Btn": "B" }],
+        ["Circle", { "Btn": "A" }],
+        ["L2", { "Btn": "X" }],
+        ["TouchLeft", { "Btn": "Lb" }],
+        ["TouchRight", { "Btn": "Rb" }],
+        ["LsUp", { "Btn": "Y" }]
+      ],
+      "swap_sticks": false,
+      "left": { "mode": "Stick", "invert_x": false, "invert_y": false },
+      "right": { "mode": "Stick", "invert_x": false, "invert_y": true },
+      "trigger_threshold": 40
+    },
+    "turbo": [
+      { "btn": "X", "hz": 12 },
+      { "btn": "Rb", "hz": 20 }
+    ],
+    "macros": [
+      {
+        "name": "Quick dodge",
+        "enabled": true,
+        "chord": ["Create", "L1"],
+        "mode": "Once",
+        "swallow": true,
+        "steps": [
+          { "Hold": [{ "Btn": "B" }, 80] },
+          { "Wait": 40 },
+          { "Hold": [{ "Btn": "A" }, 60] }
+        ]
+      },
+      {
+        "name": "Rapid reload",
+        "enabled": true,
+        "chord": ["R3"],
+        "mode": "Toggle",
+        "swallow": true,
+        "steps": [
+          { "Press": { "Btn": "X" } },
+          { "Wait": 30 },
+          { "Release": { "Btn": "X" } },
+          { "Wait": 120 }
+        ]
+      }
+    ]
+  },
+  "profiles": [
+    {
+      "name": "Racing",
+      "exes": ["forza.exe"],
+      "light": [255, 138, 61],
+      "emu": {
+        "left": { "inner": 0.03, "outer": 0.02, "anti": 0.0, "curve": "Smooth" },
+        "remap": { "binds": [["R2", { "Btn": "A" }]], "trigger_threshold": 60 },
+        "turbo": []
+      }
+    },
+    {
+      "name": "Shooter",
+      "exes": ["cod.exe", "halo.exe"],
+      "light": [236, 91, 69],
+      "emu": {
+        "right": { "inner": 0.1, "outer": 0.0, "anti": 0.0, "curve": "Aggressive" },
+        "turbo": [{ "btn": "Rb", "hz": 15 }]
+      }
+    },
+    {
+      "name": "Platformer",
+      "exes": [],
+      "light": null,
+      "emu": {}
+    }
+  ]
+}
