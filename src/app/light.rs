@@ -21,24 +21,57 @@ fn rgb_of(c: u32) -> [u8; 3] {
     [(c >> 16) as u8, (c >> 8) as u8, c as u8]
 }
 
-/// A labelled slider row: a fixed label column, the slider, and the value.
+/// A labelled slider row: label, slider, value. The label column is as wide as the widest label of the card in
+/// the current language (plus a gap), so the sliders line up and no label runs under a slider. When the card is too
+/// narrow for a usable slider next to the label, the label goes above the slider.
 pub(super) fn slider_row(ui: &mut Ui, p: &Pal, label: &str, value: &mut f32, min: f32, max: f32, shown: &dyn Fn(f32) -> String) -> bool {
-    slider_row_w(ui, p, label, 150.0, value, min, max, shown)
+    slider_row_w(ui, p, label, 0.0, value, min, max, shown)
 }
 
-/// [`slider_row`] with a label column of `label_w` (longer labels need a wider one).
+const LABEL_GAP: f32 = 16.0;
+const VALUE_COL: f32 = 70.0;
+const MIN_SLIDER: f32 = 120.0;
+
+/// [`slider_row`] with a minimum label column of `label_w`. The rows of one card share the widest label seen.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn slider_row_w(ui: &mut Ui, p: &Pal, label: &str, label_w: f32, value: &mut f32, min: f32, max: f32, shown: &dyn Fn(f32) -> String) -> bool {
     let mut changed = false;
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 12.0;
-        let (lr, _) = ui.allocate_exact_size(vec2(label_w, 24.0), Sense::hover());
-        ui.painter().text(lr.left_center(), egui::Align2::LEFT_CENTER, label, theme::reg(13.5), p.text);
-        let w = (ui.available_width() - 70.0).max(80.0);
-        ui.allocate_ui_with_layout(vec2(w, 24.0), Layout::left_to_right(Align::Center), |ui| {
-            changed = theme::slider(ui, value, min, max, 1.0, p).changed();
+    let font = theme::reg(13.5);
+    let own = ui.painter().layout_no_wrap(label.to_string(), font.clone(), p.text).size().x.ceil();
+    // The widest label of this card (rows are drawn in the same parent), kept from the previous frame.
+    let key = ui.scope_id().with("slider-label-col");
+    let seen: f32 = ui.ctx().data(|d| d.get_temp(key)).unwrap_or(0.0);
+    if own > seen {
+        ui.ctx().data_mut(|d| d.insert_temp(key, own));
+        ui.ctx().request_repaint();
+    }
+    let lw = own.max(seen).max(label_w.min(0.0));
+    let narrow = ui.available_width() - lw - LABEL_GAP - VALUE_COL < MIN_SLIDER;
+    if narrow {
+        ui.label(RichText::new(label).font(font).color(p.text));
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 12.0;
+            let w = (ui.available_width() - VALUE_COL).max(MIN_SLIDER.min(ui.available_width()));
+            changed = put_slider(ui, p, w, value, min, max);
+            ui.label(RichText::new(shown(*value)).font(theme::mono(13.0)).color(p.text));
         });
-        ui.label(RichText::new(shown(*value)).font(theme::mono(13.0)).color(p.text));
+    } else {
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = LABEL_GAP;
+            let (lr, _) = ui.allocate_exact_size(vec2(lw, 24.0), Sense::hover());
+            ui.painter().text(lr.left_center(), egui::Align2::LEFT_CENTER, label, font, p.text);
+            let w = (ui.available_width() - VALUE_COL).max(MIN_SLIDER);
+            changed = put_slider(ui, p, w, value, min, max);
+            ui.label(RichText::new(shown(*value)).font(theme::mono(13.0)).color(p.text));
+        });
+    }
+    changed
+}
+
+fn put_slider(ui: &mut Ui, p: &Pal, w: f32, value: &mut f32, min: f32, max: f32) -> bool {
+    let mut changed = false;
+    ui.allocate_ui_with_layout(vec2(w, 24.0), Layout::left_to_right(Align::Center), |ui| {
+        changed = theme::slider(ui, value, min, max, 1.0, p).changed();
     });
     changed
 }
