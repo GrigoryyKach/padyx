@@ -29,6 +29,7 @@ mod macros;
 mod motion;
 mod onboarding;
 mod overview;
+mod padview;
 mod profiles;
 mod remap;
 mod settings;

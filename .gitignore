@@ -2,3 +2,8 @@
 *.log
 .claude/
 /tmp-data/
+*.glb
+*.gltf
+*.blend
+*.fbx
+*.obj

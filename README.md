@@ -6,7 +6,7 @@ A DualSense tester and helper for Windows and Linux. It shows every control of a
 
 ## What it does
 
-- **Overview.** A drawn DualSense lights up as you press it. Triggers fill by value, sticks show their position, the touchpad shows both fingers. Connection (USB or Bluetooth), battery and the measured polling rate are always on top.
+- **Overview.** A rendered DualSense, seen from above and a little from the trigger side, lights up as you press it. Buttons sink and glow, the sticks tilt, the triggers pull in and fill by value, the lightbar shows its colour and the touchpad shows both fingers. Connection (USB or Bluetooth), battery and the measured polling rate are always on top.
 - **Sticks and drift.** A large plot per stick with its trail and the 5 % and 10 % rings. A five second no-touch drift test gives the resting offset and jitter with a verdict. A circularity test shows the outer shape of the travel and its average error.
 - **Triggers.** Live values and a test of the adaptive effects (resistance, weapon, vibration).
 - **Buttons and timing.** A checklist of 19 controls (the two triggers tick when pulled past half) that tick as you press them, and the interval between reports with its jitter.
@@ -124,6 +124,10 @@ The parsers and writers are written from the public descriptions of the reports 
 If Padyx is useful to you, you can support its development: https://donatello.to/MicsGame
 
 ![QR code](assets/support-qr.png)
+
+## Credits
+
+- Controller render made from a royalty-free 3D model. Only the rendered pictures are part of Padyx (`assets/pad`); the model itself is not included.
 
 ## License
 

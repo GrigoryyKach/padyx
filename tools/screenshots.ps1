@@ -1,5 +1,6 @@
 # Screenshots of the Padyx window with the demo pad (no hardware, own temporary data folder, own window only).
 # Usage: .\tools\screenshots.ps1 -Out .\assets\screenshots -Theme dark -Lang en -Navs overview,sticks -DemoT 25.5
+# -Pose holds one fixed pose (buttons, sticks, triggers and a touch active at once) instead of the script.
 # -AutoTest drift|circ starts that stick test at launch; use -Hold:$false and a large -Wait so it can finish.
 # -Sample is like -Emulation but writes tools/sample-config.json (remap, macros, turbo, three profiles), pretends
 #   the game forza.exe is in front (PADYX_FG_MOCK, so auto-switch picks the Racing profile) and opens the profile
@@ -21,7 +22,8 @@ param(
     [switch]$Emulation,
     [switch]$Sample,
     [string]$EditProfile = "",
-    [int]$Scroll = 0
+    [int]$Scroll = 0,
+    [switch]$Pose
 )
 $ErrorActionPreference = "Stop"
 $data = Join-Path ([IO.Path]::GetTempPath()) ("padyx-shots-" + [guid]::NewGuid().ToString("N"))
@@ -38,6 +40,7 @@ $env:PADYX_DEMO_T = "$DemoT"
 $env:PADYX_WINDOW = $Window
 if ($Hold) { $env:PADYX_DEMO_HOLD = "1" } else { Remove-Item Env:PADYX_DEMO_HOLD -ErrorAction SilentlyContinue }
 if ($AutoTest) { $env:PADYX_AUTOTEST = $AutoTest } else { Remove-Item Env:PADYX_AUTOTEST -ErrorAction SilentlyContinue }
+if ($Pose) { $env:PADYX_DEMO_POSE = "1" } else { Remove-Item Env:PADYX_DEMO_POSE -ErrorAction SilentlyContinue }
 if ($Scroll -gt 0) { $env:PADYX_SCROLL = "$Scroll" } else { Remove-Item Env:PADYX_SCROLL -ErrorAction SilentlyContinue }
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 if ($Emulation -or $Sample) {
@@ -57,5 +60,5 @@ if ($Emulation -or $Sample) {
 $p = Start-Process -FilePath $Exe -ArgumentList "--demo" -PassThru
 if (-not $p.WaitForExit(120000)) { $p.Kill(); Write-Host "killed after timeout" }
 Remove-Item -Recurse -Force $data -ErrorAction SilentlyContinue
-Remove-Item Env:PADYX_EMU_MOCK, Env:PADYX_SCROLL, Env:PADYX_FG_MOCK, Env:PADYX_EDIT_PROFILE -ErrorAction SilentlyContinue
+Remove-Item Env:PADYX_EMU_MOCK, Env:PADYX_DEMO_POSE, Env:PADYX_SCROLL, Env:PADYX_FG_MOCK, Env:PADYX_EDIT_PROFILE -ErrorAction SilentlyContinue
 Get-ChildItem $env:PADYX_SHOT_DIR -Filter "$Prefix-*.png" | Select-Object Name, Length

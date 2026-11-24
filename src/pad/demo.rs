@@ -11,7 +11,8 @@
 //! - 32..40 s: two fingers move over the touchpad.
 //!
 //! `PADYX_DEMO_T=<seconds>` starts the script at that time and `PADYX_DEMO_HOLD=1` freezes it there, so a
-//! screenshot shows the same frame every time.
+//! screenshot shows the same frame every time. `PADYX_DEMO_POSE=1` holds one fixed pose instead (several buttons,
+//! both sticks pushed, both triggers pulled, a finger on the touchpad), for the Overview screenshots.
 
 use super::hub::{IoError, PadIo};
 #[cfg(test)]
@@ -85,6 +86,24 @@ pub fn demo_state(t: f32) -> PadState {
     let tilt = 0.25 * (t * 0.35).sin();
     let roll = 0.2 * (t * 0.27).cos();
     s.accel = [roll.sin(), tilt.cos() * roll.cos(), tilt.sin()];
+    s
+}
+
+/// A fixed pose with several controls active at once.
+pub fn pose_state() -> PadState {
+    let mut s = PadState { conn: Conn::Usb, battery: Some(78), charge: Charge::Discharging, ..Default::default() };
+    for b in [Btn::Up, Btn::Left, Btn::Cross, Btn::Triangle, Btn::L1, Btn::Create, Btn::Ps, Btn::L3] {
+        s.set(b, true);
+    }
+    s.lx = to_byte(0.75);
+    s.ly = to_byte(-0.45);
+    s.rx = to_byte(-0.55);
+    s.ry = to_byte(0.65);
+    s.l2 = 150;
+    s.r2 = 255;
+    s.set(Btn::R2, true);
+    s.touch[0] = Finger { active: true, id: 1, x: 700, y: 430 };
+    s.touch[1] = Finger { active: true, id: 2, x: 1350, y: 620 };
     s
 }
 
@@ -178,6 +197,7 @@ pub struct DemoIo {
     start: Instant,
     t0: f32,
     hold: bool,
+    pose: bool,
     next: Instant,
     counter: u32,
 }
@@ -186,8 +206,9 @@ impl DemoIo {
     pub fn new() -> Self {
         let t0 = std::env::var("PADYX_DEMO_T").ok().and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0);
         let hold = std::env::var("PADYX_DEMO_HOLD").is_ok_and(|v| v == "1");
+        let pose = std::env::var("PADYX_DEMO_POSE").is_ok_and(|v| v == "1");
         let now = Instant::now();
-        Self { start: now, t0, hold, next: now, counter: 0 }
+        Self { start: now, t0, hold, pose, next: now, counter: 0 }
     }
 }
 
@@ -206,7 +227,7 @@ impl PadIo for DemoIo {
         }
         self.next += Duration::from_millis(4);
         let t = if self.hold { self.t0 } else { self.t0 + self.start.elapsed().as_secs_f32() };
-        let mut s = demo_state(t);
+        let mut s = if self.pose { pose_state() } else { demo_state(t) };
         self.counter = self.counter.wrapping_add(1);
         s.counter = self.counter;
         let r = usb_report_from(&s);
@@ -227,6 +248,14 @@ impl PadIo for DemoIo {
 mod tests {
     use super::*;
     use crate::pad::parse::{parse_dualsense, Calib};
+
+    #[test]
+    fn the_pose_round_trips_through_the_parser() {
+        let s = pose_state();
+        let p = parse_dualsense(&usb_report_from(&s), &Calib::default()).unwrap();
+        assert_eq!((p.l2, p.r2, p.buttons, p.touch), (s.l2, s.r2, s.buttons, s.touch));
+        assert!(p.pressed(Btn::Cross) && p.pressed(Btn::L3) && p.pressed(Btn::R2));
+    }
 
     #[test]
     fn the_script_round_trips_through_the_parser() {
