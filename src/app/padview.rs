@@ -37,6 +37,9 @@ pub struct Sprite {
     pub atlas: Option<[f32; 4]>,
     /// Its silhouette in the mask atlas: x, y, w, h.
     pub mask: Option<[f32; 4]>,
+    /// Its outline (a thin ring just inside the silhouette) in the mask atlas, for the pressed highlight.
+    #[serde(default)]
+    pub ring: Option<[f32; 4]>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -177,6 +180,13 @@ impl Pen<'_> {
         let r = self.f.rect([sp.rect[0] + shift.0, sp.rect[1] + shift.1, sp.rect[2] + shift.0, sp.rect[3] + shift.1]);
         self.quad(self.art.sprites.id(), r, uv(a, self.art.sprites_size), tint);
     }
+    /// A thin outline along the inside of a sprite's silhouette.
+    fn ring(&self, part: &str, name: &str, tint: Color32, shift: (f32, f32)) {
+        let Some(sp) = self.l.sprite(part, name) else { return };
+        let Some(m) = sp.ring else { return };
+        let r = self.f.rect([sp.rect[0] + shift.0, sp.rect[1] + shift.1, sp.rect[2] + shift.0, sp.rect[3] + shift.1]);
+        self.quad(self.art.masks.id(), r, uv(m, self.art.masks_size), tint);
+    }
     /// The accent (or any colour) in the shape of a sprite's silhouette.
     fn mask(&self, part: &str, name: &str, tint: Color32, shift: (f32, f32)) {
         let Some(sp) = self.l.sprite(part, name) else { return };
@@ -210,7 +220,7 @@ pub fn pad_view(ui: &mut Ui, rect: Rect, pad: &PadSnapshot, p: &Pal) {
     for (b, id) in [(Btn::L1, "l1"), (Btn::R1, "r1")] {
         if on(b) {
             pen.sprite(id, "pressed", Color32::WHITE, (0.0, 0.0));
-            pen.mask(id, "pressed", accent(p, 110), (0.0, 0.0));
+            pen.mask(id, "pressed", accent(p, 150), (0.0, 0.0));
         }
     }
 
@@ -238,14 +248,16 @@ pub fn pad_view(ui: &mut Ui, rect: Rect, pad: &PadSnapshot, p: &Pal) {
     ] {
         if on(b) {
             pen.sprite(id, "pressed", Color32::WHITE, (0.0, 0.0));
-            pen.mask(id, "pressed", accent(p, if b == Btn::Touchpad { 90 } else { 140 }), (0.0, 0.0));
+            pen.mask(id, "pressed", accent(p, if b == Btn::Touchpad { 45 } else { 80 }), (0.0, 0.0));
+            pen.ring(id, "pressed", accent(p, 255), (0.0, 0.0));
         } else {
             pen.sprite(id, "idle", Color32::WHITE, (0.0, 0.0));
         }
     }
     // The PS button is the logo area: it only gets the accent.
     if on(Btn::Ps) {
-        pen.mask("ps", "mask", accent(p, 200), (0.0, 0.0));
+        pen.mask("ps", "mask", accent(p, 90), (0.0, 0.0));
+        pen.ring("ps", "mask", accent(p, 255), (0.0, 0.0));
     }
 
     // Touch dots on the visible face of the touchpad.
@@ -268,9 +280,12 @@ pub fn pad_view(ui: &mut Ui, rect: Rect, pad: &PadSnapshot, p: &Pal) {
         pen.sprite(id, TRIGGER_STEPS[lo], Color32::from_white_alpha(((1.0 - f) * 255.0).round() as u8), (0.0, 0.0));
         pen.sprite(id, TRIGGER_STEPS[lo + 1], Color32::from_white_alpha((f * 255.0).round() as u8), (0.0, 0.0));
         let near = TRIGGER_STEPS[(val * (TRIGGER_STEPS.len() - 1) as f32).round() as usize];
-        let a = (val * 170.0) as u8 + if click { 70 } else { 0 };
+        let a = (val * 110.0) as u8 + if click { 30 } else { 0 };
         if a > 4 {
             pen.mask(id, near, accent(p, a), (0.0, 0.0));
+        }
+        if click {
+            pen.ring(id, near, accent(p, 255), (0.0, 0.0));
         }
     }
 
@@ -289,7 +304,8 @@ pub fn pad_view(ui: &mut Ui, rect: Rect, pad: &PadSnapshot, p: &Pal) {
         let (name, sh) = if pressed && still { ("pressed".to_string(), (0.0, 0.0)) } else { (tilt_name(i, j), (shift.0, shift.1 + if pressed { 3.0 } else { 0.0 })) };
         pen.sprite(id, &name, Color32::WHITE, sh);
         if pressed {
-            pen.mask(id, &name, accent(p, 150), sh);
+            pen.mask(id, &name, accent(p, 70), sh);
+            pen.ring(id, &name, accent(p, 255), sh);
         }
     }
 
@@ -298,7 +314,7 @@ pub fn pad_view(ui: &mut Ui, rect: Rect, pad: &PadSnapshot, p: &Pal) {
     for (id, text, over, btn, val) in [("l2", "L2", true, Btn::L2, st.trigger_l()), ("r2", "R2", true, Btn::R2, st.trigger_r()), ("l1", "L1", false, Btn::L1, 0.0), ("r1", "R1", false, Btn::R1, 0.0)] {
         let Some(r) = l.rect_of(id) else { continue };
         let lit = on(btn) || val > 0.05;
-        let (cx, cy) = ((r[0] + r[2]) / 2.0, if over { r[1] - 11.0 } else { (r[1] + r[3]) / 2.0 });
+        let (cx, cy) = ((r[0] + r[2]) / 2.0, if over { r[1] - 11.0 } else { (r[1] + r[3]) / 2.0 + 17.0 });
         let col = if lit { p.accent } else if over { p.muted } else { Color32::from_rgb(112, 118, 130) };
         pen.painter.text(pen.f.pt(cx, cy), egui::Align2::CENTER_CENTER, text, font.clone(), col);
     }
@@ -360,6 +376,9 @@ mod tests {
                     assert!((sp.rect[2] - sp.rect[0] - a[2]).abs() < 0.5 && (sp.rect[3] - sp.rect[1] - a[3]).abs() < 0.5, "{part}/{n} size mismatch");
                 }
                 if n != "idle" && n != "s0" {
+                    if !matches!(part.as_str(), "l1" | "r1" | "lightbar") && !n.starts_with('s') {
+                        assert!(sp.ring.is_some(), "{part}/{n} has no outline");
+                    }
                     let m = sp.mask.unwrap_or_else(|| panic!("{part}/{n} has no mask"));
                     assert!(m[0] >= 0.0 && m[1] >= 0.0 && m[0] + m[2] <= mw && m[1] + m[3] <= mh, "{part}/{n} leaves the mask atlas");
                 }
