@@ -92,16 +92,19 @@ pub fn demo_state(t: f32) -> PadState {
 /// A fixed pose with several controls active at once.
 pub fn pose_state() -> PadState {
     let mut s = PadState { conn: Conn::Usb, battery: Some(78), charge: Charge::Discharging, ..Default::default() };
-    for b in [Btn::Up, Btn::Left, Btn::Cross, Btn::Triangle, Btn::L1, Btn::Create, Btn::Ps, Btn::L3] {
+    // `PADYX_POSE_L1=0`, `PADYX_POSE_L2` and `PADYX_POSE_R2` (0..255) adjust the shoulders for screenshots.
+    let env = |k: &str| std::env::var(k).ok().and_then(|v| v.parse::<u8>().ok());
+    for b in [Btn::Up, Btn::Left, Btn::Cross, Btn::Triangle, Btn::Create, Btn::Ps, Btn::L3] {
         s.set(b, true);
     }
+    s.set(Btn::L1, env("PADYX_POSE_L1") != Some(0));
     s.lx = to_byte(0.75);
     s.ly = to_byte(-0.45);
     s.rx = to_byte(-0.55);
     s.ry = to_byte(0.65);
-    s.l2 = 150;
-    s.r2 = 255;
-    s.set(Btn::R2, true);
+    s.l2 = env("PADYX_POSE_L2").unwrap_or(150);
+    s.r2 = env("PADYX_POSE_R2").unwrap_or(255);
+    s.set(Btn::R2, s.r2 > 240);
     s.touch[0] = Finger { active: true, id: 1, x: 700, y: 430 };
     s.touch[1] = Finger { active: true, id: 2, x: 1350, y: 620 };
     s

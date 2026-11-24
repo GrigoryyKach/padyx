@@ -97,6 +97,20 @@ pub fn tilt_cell(x: f32, y: f32) -> (usize, usize, f32, f32) {
     (i as usize, j as usize, gx - i, gy - j)
 }
 
+/// What the shoulders show. The bumpers (L1, R1) depend only on their own button and the triggers (L2, R2) only on
+/// their own pull, so one can never move the other.
+pub struct ShoulderPlan {
+    /// Sprite name of the left and the right bumper.
+    pub bumper: [&'static str; 2],
+    /// The two trigger steps to blend and how far toward the upper one, for the left and the right trigger.
+    pub trigger: [(usize, f32); 2],
+}
+
+pub fn shoulder_plan(bumper_pressed: [bool; 2], trigger_pull: [f32; 2]) -> ShoulderPlan {
+    let name = |p: bool| if p { "pressed" } else { "idle" };
+    ShoulderPlan { bumper: [name(bumper_pressed[0]), name(bumper_pressed[1])], trigger: [trigger_blend(trigger_pull[0]), trigger_blend(trigger_pull[1])] }
+}
+
 pub fn tilt_name(i: usize, j: usize) -> String {
     format!("t{i}{j}")
 }
@@ -216,14 +230,6 @@ pub fn pad_view(ui: &mut Ui, rect: Rect, pad: &PadSnapshot, p: &Pal) {
     pen.quad(art.rim.id(), whole, FULL_UV, rim_tint);
     pen.quad(art.body.id(), whole, FULL_UV, Color32::WHITE);
 
-    // Shoulders: L1 and R1 are dents in the shell.
-    for (b, id) in [(Btn::L1, "l1"), (Btn::R1, "r1")] {
-        if on(b) {
-            pen.sprite(id, "pressed", Color32::WHITE, (0.0, 0.0));
-            pen.mask(id, "pressed", accent(p, 150), (0.0, 0.0));
-        }
-    }
-
     // The lightbar strips in the colour the pad is told to show.
     let lc = pad.out.light_scaled();
     if lc.iter().any(|&c| c > 0) {
@@ -274,19 +280,14 @@ pub fn pad_view(ui: &mut Ui, rect: Rect, pad: &PadSnapshot, p: &Pal) {
         }
     }
 
-    // Triggers: two neighbouring pull steps cross-fade; the accent grows with the pull.
-    for (id, val, click) in [("l2", st.trigger_l(), on(Btn::L2)), ("r2", st.trigger_r(), on(Btn::R2))] {
-        let (lo, f) = trigger_blend(val);
+    // Triggers (the blade under the bumper) and bumpers: separate meshes. The trigger cross-fades between pull
+    // steps; the bumper sinks when L1/R1 is pressed. Neither has a highlight; the badge colour is the cue.
+    let plan = shoulder_plan([on(Btn::L1), on(Btn::R1)], [st.trigger_l(), st.trigger_r()]);
+    for (k, (id, bumper)) in [("l2", "l1"), ("r2", "r1")].into_iter().enumerate() {
+        let (lo, f) = plan.trigger[k];
         pen.sprite(id, TRIGGER_STEPS[lo], Color32::from_white_alpha(((1.0 - f) * 255.0).round() as u8), (0.0, 0.0));
         pen.sprite(id, TRIGGER_STEPS[lo + 1], Color32::from_white_alpha((f * 255.0).round() as u8), (0.0, 0.0));
-        let near = TRIGGER_STEPS[(val * (TRIGGER_STEPS.len() - 1) as f32).round() as usize];
-        let a = (val * 110.0) as u8 + if click { 30 } else { 0 };
-        if a > 4 {
-            pen.mask(id, near, accent(p, a), (0.0, 0.0));
-        }
-        if click {
-            pen.ring(id, near, accent(p, 255), (0.0, 0.0));
-        }
+        pen.sprite(bumper, plan.bumper[k], Color32::WHITE, (0.0, 0.0));
     }
 
     // Sticks: the nearest tilt sprite, nudged by the part of a cell the stick is off its centre.
@@ -315,7 +316,7 @@ pub fn pad_view(ui: &mut Ui, rect: Rect, pad: &PadSnapshot, p: &Pal) {
         let Some(r) = l.rect_of(id) else { continue };
         let lit = on(btn) || val > 0.05;
         let (cx, cy) = ((r[0] + r[2]) / 2.0, if over { r[1] - 11.0 } else { (r[1] + r[3]) / 2.0 + 17.0 });
-        let col = if lit { p.accent } else if over { p.muted } else { Color32::from_rgb(112, 118, 130) };
+        let col = if lit { p.accent } else if over { p.muted } else { Color32::from_rgb(168, 174, 186) };
         pen.painter.text(pen.f.pt(cx, cy), egui::Align2::CENTER_CENTER, text, font.clone(), col);
     }
 }
@@ -348,7 +349,7 @@ mod tests {
             need.push((id.into(), vec!["idle".into(), "pressed".into()]));
         }
         for id in ["l1", "r1"] {
-            need.push((id.into(), vec!["pressed".into()]));
+            need.push((id.into(), vec!["idle".into(), "pressed".into()]));
         }
         for id in ["l2", "r2"] {
             need.push((id.into(), TRIGGER_STEPS.iter().map(|s| s.to_string()).collect()));
@@ -375,8 +376,9 @@ mod tests {
                     // The sprite is drawn at its own size.
                     assert!((sp.rect[2] - sp.rect[0] - a[2]).abs() < 0.5 && (sp.rect[3] - sp.rect[1] - a[3]).abs() < 0.5, "{part}/{n} size mismatch");
                 }
-                if n != "idle" && n != "s0" {
-                    if !matches!(part.as_str(), "l1" | "r1" | "lightbar") && !n.starts_with('s') {
+                let shoulder = matches!(part.as_str(), "l1" | "r1" | "l2" | "r2");
+                if n != "idle" && n != "s0" && !shoulder {
+                    if !matches!(part.as_str(), "lightbar") && !n.starts_with('s') && n != "idle" {
                         assert!(sp.ring.is_some(), "{part}/{n} has no outline");
                     }
                     let m = sp.mask.unwrap_or_else(|| panic!("{part}/{n} has no mask"));
@@ -387,6 +389,34 @@ mod tests {
         for (id, part) in &l.parts {
             for (n, sp) in &part.sprites {
                 assert!(sp.rect[0] >= 0.0 && sp.rect[1] >= 0.0 && sp.rect[2] <= l.size[0] && sp.rect[3] <= l.size[1], "{id}/{n} sticks out of the picture: {:?}", sp.rect);
+            }
+        }
+    }
+
+    #[test]
+    fn bumpers_ignore_the_trigger_and_triggers_ignore_the_bumper() {
+        let base = shoulder_plan([false, false], [0.0, 0.0]);
+        for pull in [0.0f32, 0.1, 0.33, 0.5, 0.8, 1.0] {
+            let p = shoulder_plan([false, false], [pull, pull]);
+            assert_eq!(p.bumper, base.bumper, "the bumper sprites must not follow the trigger ({pull})");
+            let q = shoulder_plan([true, false], [pull, 1.0 - pull]);
+            assert_eq!(q.bumper, ["pressed", "idle"]);
+        }
+        for pressed in [[false, false], [true, false], [false, true], [true, true]] {
+            let p = shoulder_plan(pressed, [0.6, 0.2]);
+            assert_eq!(p.trigger, [trigger_blend(0.6), trigger_blend(0.2)], "the trigger must not follow the bumper");
+        }
+        let l = layout();
+        for id in ["l1", "r1"] {
+            let idle = l.sprite(id, "idle").unwrap();
+            let pressed = l.sprite(id, "pressed").unwrap();
+            assert!(idle.atlas.is_some() && pressed.atlas.is_some() && idle.atlas != pressed.atlas, "{id} has two different sprites");
+            assert!(idle.mask.is_none() && pressed.mask.is_none() && idle.ring.is_none(), "{id} has no highlight layers");
+        }
+        for id in ["l2", "r2"] {
+            for n in TRIGGER_STEPS {
+                let sp = l.sprite(id, n).unwrap();
+                assert!(sp.mask.is_none() && sp.ring.is_none(), "{id}/{n} has no highlight layers");
             }
         }
     }
